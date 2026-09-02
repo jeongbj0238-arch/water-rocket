@@ -22,9 +22,14 @@
      그 점 하나가 다음 정상 점과 이어지며 가짜 최고속력을 만든다.
      그래서 "직전까지 잡히던 크기"를 따라가며 급격히 작아진 검출은 놓침으로 돌린다.
      로켓이 멀어져 서서히 작아지는 것은 BLOB_TRACK_A로 따라가므로 막지 않는다. */
-  const BLOB_MIN_ABS = 8;      // 어떤 경우에도 이보다 작으면 인정하지 않는다
-  const BLOB_MIN_REL = 0.25;   // 직전까지 잡히던 크기의 이 비율 미만이면 놓침
+  /* ⚠️ 크기는 **축소된 작업 캔버스**(WORK_MAX_W=720) 기준이다. 1920 영상이면 면적이 0.14배로
+     줄어드니 하한을 크게 잡으면 안 된다. 처음에 8px/25%로 잡았다가 추적이 통째로 죽었다. */
+  const BLOB_MIN_ABS = 4;      // 어떤 경우에도 이보다 작으면 인정하지 않는다
+  const BLOB_MIN_REL = 0.15;   // 직전까지 잡히던 크기의 이 비율 미만이면 놓침
   const BLOB_TRACK_A = 0.3;    // 기준 크기를 새 값 쪽으로 얼마나 끌어당길지
+  /* 못 잡는 동안 기준을 계속 낮춘다. 이게 없으면 한 번 걸러진 뒤 기준이 높은 채로 남아
+     **영원히 회복하지 못한다**(원만 커지며 끝까지 못 잡는 증상). */
+  const BLOB_RELAX = 0.8;
 
   /* 추적 범위(ROI) — 범위 밖 픽셀은 아예 읽지 않는다.
      놓친 프레임마다 반지름을 키워 잠깐의 모션 블러/가림을 넘긴다. */
@@ -871,6 +876,8 @@
         state.rois.set(f, { x: roi.x, y: roi.y, r: radius, grown: true });
         radius = Math.min(maxR, radius * ROI_GROW);
         if (prev) { prev2 = prev; prev = { x: center.x, y: center.y }; }
+        // 못 잡는 동안 크기 기준도 함께 낮춰야 다시 잡을 수 있다
+        if (sizeRef != null) sizeRef = Math.max(BLOB_MIN_ABS, sizeRef * BLOB_RELAX);
         missed++;
       }
 
