@@ -16,7 +16,15 @@
   "use strict";
 
   const WORK_MAX_W = 720;   // 픽셀 분석 해상도 상한 (프레임당 연산량 제한)
-  const MIN_BLOB_PX = 3;    // 이보다 작은 색 덩어리는 노이즈로 본다
+  const MIN_BLOB_PX = 3;    // 이보다 작은 색 덩어리는 노이즈로 본다 (절대 하한)
+  /* ⚠️ 3픽셀은 너무 관대하다. 로켓이 흐려지면 제대로 된 덩어리는 못 잡아도
+     자국 끄트머리나 얼룩 3픽셀은 통과해서, **로켓보다 뒤처진 가짜 점**이 기록됐다.
+     그 점 하나가 다음 정상 점과 이어지며 가짜 최고속력을 만든다.
+     그래서 "직전까지 잡히던 크기"를 따라가며 급격히 작아진 검출은 놓침으로 돌린다.
+     로켓이 멀어져 서서히 작아지는 것은 BLOB_TRACK_A로 따라가므로 막지 않는다. */
+  const BLOB_MIN_ABS = 8;      // 어떤 경우에도 이보다 작으면 인정하지 않는다
+  const BLOB_MIN_REL = 0.25;   // 직전까지 잡히던 크기의 이 비율 미만이면 놓침
+  const BLOB_TRACK_A = 0.3;    // 기준 크기를 새 값 쪽으로 얼마나 끌어당길지
 
   /* 추적 범위(ROI) — 범위 밖 픽셀은 아예 읽지 않는다.
      놓친 프레임마다 반지름을 키워 잠깐의 모션 블러/가림을 넘긴다. */
@@ -55,6 +63,8 @@
   const shotFps = $("shotFps");
   const fallbackBox = $("fallbackBox");
   const effBox = $("effBox");
+  const fpsNeeded = $("fpsNeeded");
+  const next1 = $("next1");
   const manualBtn = $("manualBtn");
 
   const playBtn = $("playBtn");
@@ -112,7 +122,7 @@
   const peakTag = $("peakTag");
   const autoPeakBtn = $("autoPeakBtn");
 
-  const gCheck = $("gCheck");
+  const plausibility = $("plausibility");
   const graph = $("graph");
   const resSpeed = $("resSpeed");
   const resHeight = $("resHeight");
@@ -140,6 +150,7 @@
     groundManual: false,
 
     target: null,       // { h, s, v, hex }
+    blobRef: null,      // 색·범위를 고른 시점에 실제로 잡힌 덩어리 크기(px). 가짜 검출 판정 기준
     roi: null,          // 사용자가 그린 기준 범위 { x, y, r } (natural px)
     mode: null,         // 'scale' | 'color' | 'recolor' | 'ground' | null
     dragging: null,
@@ -476,8 +487,8 @@
     }
 
     recalcFrames();
-    setStepState(1, "완료");
-    markDone(1);
+    // 촬영 fps가 비어 있으면 recalcFrames가 1단계를 막아 둔다
+    if (state.fpsReady) { setStepState(1, "완료"); markDone(1); }
     enableAfterLoad();
     applyRate();          // src를 바꾸면 playbackRate가 1로 초기화된다
     gotoFrame(0).then(redraw);
@@ -532,19 +543,28 @@
 
   function recalcFrames() {
     const prevCount = state.frameCount;
-    state.shotFps = Math.max(1, Number(shotFps.value) || 240);
+    /* 기본값을 두지 않는다 — 미리 채워져 있으면 학생이 손대지 않고 지나가는데,
+       이 값이 틀리면 속력이 통째로 틀어지면서 화면에는 아무 표시도 나지 않는다.
+       비어 있으면 2단계로 못 넘어가게 막는다. */
+    const typed = Number(shotFps.value);
+    state.fpsReady = shotFps.value !== "" && isFinite(typed) && typed >= 1;
+    state.shotFps = state.fpsReady ? typed : 240;   // 표시용 임시값
+    fpsNeeded.hidden = state.fpsReady;
 
     if (state.frameTimes) {
       state.frameCount = state.frameTimes.length;
       const play = state.duration || state.frameTimes[state.frameTimes.length - 1];
       const real = state.frameCount / state.shotFps;
       const slowMult = real > 0 ? play / real : 1;
-      effBox.innerHTML =
-        "파일에서 읽음 &middot; <b class='mono'>" + state.frameCount.toLocaleString() + "</b> 프레임"
-        + " &middot; 재생 <b class='mono'>" + play.toFixed(2) + "</b> s<br>"
-        + "촬영 " + state.shotFps + " fps &rarr; 실제 동작 <b class='mono'>" + real.toFixed(2) + "</b> s"
-        + " &middot; 슬로우 <b class='mono'>&times;" + slowMult.toFixed(2) + "</b><br>"
-        + "한 프레임 = <b class='mono'>" + (1 / state.shotFps).toFixed(5) + "</b> s (실제)";
+      effBox.innerHTML = !state.fpsReady
+        ? "파일에서 읽음 &middot; <b class='mono'>" + state.frameCount.toLocaleString() + "</b> 프레임"
+          + " &middot; 재생 <b class='mono'>" + play.toFixed(2) + "</b> s<br>"
+          + "촬영 프레임레이트를 입력하면 실제 동작 시간이 계산됩니다."
+        : "파일에서 읽음 &middot; <b class='mono'>" + state.frameCount.toLocaleString() + "</b> 프레임"
+          + " &middot; 재생 <b class='mono'>" + play.toFixed(2) + "</b> s<br>"
+          + "촬영 " + state.shotFps + " fps &rarr; 실제 동작 <b class='mono'>" + real.toFixed(2) + "</b> s"
+          + " &middot; 슬로우 <b class='mono'>&times;" + slowMult.toFixed(2) + "</b><br>"
+          + "한 프레임 = <b class='mono'>" + (1 / state.shotFps).toFixed(5) + "</b> s (실제)";
     } else {
       state.fps = Math.max(1, Number(fpsInput.value) || 30);
       state.slow = Math.max(1, Number(slowSelect.value) || 1);
@@ -574,6 +594,11 @@
     updateTransport();
     updateRoiReadout();   // 권장 반지름은 프레임 간격에 의존한다
     computeResults();
+    // 촬영 fps를 넣어야 2단계로 넘어갈 수 있다
+    if (state.loaded) {
+      if (state.fpsReady) markDone(1);
+      else { next1.disabled = true; setStepState(1, "fps 필요"); }
+    }
   }
 
   /* ============================================================
@@ -626,6 +651,7 @@
     trackBtn.disabled = !state.roi;
     if (state.roi) { markDone(3); setStepState(3, "완료"); }
     else setStepState(3, "범위 필요");
+    captureBlobRef();
     redraw();
   }
 
@@ -788,7 +814,11 @@
     let radius = baseR;
     // 이어서 시작할 때는 직전 점에서, 처음이면 사용자가 그린 원에서 출발한다.
     let center = prev ? { x: prev.x, y: prev.y } : { x: state.roi.x, y: state.roi.y };
-    let found = 0, missed = 0;
+    let found = 0, missed = 0, tooSmall = 0;
+
+    /* 검출 크기의 기준. 색·범위를 고를 때 실제로 잡힌 덩어리 크기에서 출발하고,
+       추적하면서 서서히 따라간다(로켓은 멀어질수록 작아지므로). */
+    let sizeRef = state.blobRef || null;
 
     const paceMs = trackPaceMs();
 
@@ -815,7 +845,17 @@
       }
 
       const maskInfo = buildMask(roi);
-      const blob = maskInfo ? findBlob(maskInfo) : null;
+      const raw = maskInfo ? findBlob(maskInfo) : null;
+
+      /* 너무 작아진 검출은 로켓이 아니라 자국·얼룩일 가능성이 크다.
+         점으로 남기면 뒤처진 가짜 위치가 되어 가짜 최고속력을 만든다 → 차라리 놓침으로 둔다. */
+      let blob = raw;
+      if (raw && sizeRef != null) {
+        const floor = Math.max(BLOB_MIN_ABS, sizeRef * BLOB_MIN_REL);
+        if (raw.size < floor) { blob = null; tooSmall++; }
+      } else if (raw && raw.size < BLOB_MIN_ABS) {
+        blob = null; tooSmall++;
+      }
 
       if (blob) {
         state.points.set(f, { x: blob.x, y: blob.y, manual: false });
@@ -823,6 +863,8 @@
         prev2 = prev;
         prev = blob;
         radius = baseR;              // 찾았으니 원래 크기로 복귀
+        // 멀어지며 서서히 작아지는 것은 따라간다
+        sizeRef = sizeRef == null ? blob.size : sizeRef * (1 - BLOB_TRACK_A) + blob.size * BLOB_TRACK_A;
         found++;
       } else {
         // 범위 밖은 보지 않는다. 대신 잠시 넓히며 예측 위치로 계속 전진한다.
@@ -853,7 +895,12 @@
     progressWrap.hidden = true;
 
     trackReadout.textContent = "찾음 " + found + "프레임 · 놓침 " + missed + "프레임"
-      + (missed > found * 0.3 ? "  ← 범위를 키우거나 허용 오차를 넓혀 보세요" : "");
+      + (tooSmall ? " (그중 " + tooSmall + "은 너무 작아 버림)" : "")
+      + (missed > found * 0.3
+          ? (tooSmall > missed * 0.5
+              ? "  ← 로켓이 작아져 색을 못 잡습니다. 3단계 최소 선명도를 낮춰 보세요"
+              : "  ← 범위를 키우거나 허용 오차를 넓혀 보세요")
+          : "");
     delPointBtn.disabled = false;
     clearPointsBtn.disabled = false;
     retrackBtn.disabled = false;
@@ -940,47 +987,51 @@
     renderResults();
   }
 
-  /**
-   * 자유비행 구간의 연직 가속도를 측정해 9.8과 비교한다.
-   * 이건 자기 검산 장치다 — 기준 길이(px/m)나 촬영 fps가 틀리면 측정값이 어긋나는데,
-   * 어긋나는 방식이 달라서 원인을 좁힐 수 있다.
-   *   · 기준 길이를 c배로 잘못 넣으면  a는 c배   (Y ∝ 입력한 기준 길이, buildSeries 참고)
-   *   · fps를 τ배로 잘못 넣으면        a는 τ² 배 (시간은 제곱으로 들어간다)
-   * ⚠️ 방향에 주의 — 속력도 a도 기준 길이에 **정비례**한다. 그래서 영상 속력이 부풀려져
-   * 있으면 a도 9.8보다 크게 나온다(작게가 아니다). 시간 오류는 제곱이라 훨씬 크게
-   * 어긋나므로, 두 원인은 값의 크기로 구분된다.
-   * 최고점 이후 점들에 y = y0 + v·t − ½a·t² 를 최소제곱으로 맞춘다.
-   */
-  function measuredGravity() {
-    const s = state.series;
-    if (!s || s.peakIdx == null) return null;
-    const from = s.peakIdx;
-    const pts = s.pts.slice(from);
-    if (pts.length < 5) return null;
+  /* 중력 검산은 걷어냈다 (2026-08-28).
+     원리는 옳았지만 실제 촬영에서 쓸 수 없었다 — 최소제곱으로 g를 읽으려면
+     **연소 종료 이후 0.3초 이상**을 추적해야 하는데(그래야 중력이 만드는 처짐이
+     30픽셀쯤 되어 측정 가능해진다), 로켓이 그 구간에서 작고 흐려져 추적이 끊긴다.
+     0.1초짜리 창에서는 처짐이 4픽셀뿐이라 값이 사실상 난수였고(±5 이상),
+     그 난수를 근거로 "fps를 고치세요"라는 **틀린 지시**를 확신에 차서 내보냈다.
+     지금은 대신 아래 checkPlausibility()가 발사속력 자체의 타당성만 본다. */
 
-    // t는 구간 시작 기준. [1, t, t²] 최소제곱 → t² 계수가 −a/2
-    const t0 = pts[0].t;
-    let n = 0, St = 0, St2 = 0, St3 = 0, St4 = 0, Sy = 0, Sty = 0, St2y = 0;
-    for (const p of pts) {
-      const t = p.t - t0, y = p.Y;
-      const t2 = t * t;
-      n++; St += t; St2 += t2; St3 += t2 * t; St4 += t2 * t2;
-      Sy += y; Sty += t * y; St2y += t2 * y;
+  /* 학생 조건(1.5 L 페트병 · 물 30~40% · 3~4기압 · 노즐 9 mm)을
+     water-rocket-v2.js 의 추진 모형에 넣어 얻은 범위:
+       · 정상       20 ~ 34 m/s
+       · 조건을 극단으로 밀어도(6기압·노즐 15 mm·건조 50 g) 55 m/s가 한계
+     그래서 45를 넘으면 물리적으로 불가능한 값으로 본다. */
+  const V_OK_MIN = 20, V_OK_MAX = 34;
+  const V_HIGH = 45;      // 이 위는 어떤 조건으로도 불가능
+  const V_LOW = 12;       // 이 아래는 발사 실패이거나 측정 오류
+
+  function checkPlausibility(v) {
+    if (v == null || !isFinite(v)) return null;
+    if (v > V_HIGH) {
+      return { tone: "warn", html:
+        "<b>이 조건으로는 나올 수 없는 값입니다.</b> 1.5 L 페트병 · 물 30~40% · 3~4기압이면 "
+        + "보통 <b>20~34 m/s</b>이고, 조건을 극단으로 밀어도 55 m/s가 한계입니다. "
+        + "<b>2단계 기준 길이</b>가 실제보다 길게 잡혔거나, 궤적에 <b>튄 점</b>이 섞였을 가능성이 큽니다. "
+        + "특히 <b>자동 추적이 끊긴 자리와 손으로 찍기 시작한 자리의 경계</b>를 확인하세요." };
     }
-    // 3×3 정규방정식을 크라메르 공식으로 푼다
-    const m = [[n, St, St2], [St, St2, St3], [St2, St3, St4]];
-    const rhs = [Sy, Sty, St2y];
-    const det = (a) =>
-      a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
-      - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
-      + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
-    const D = det(m);
-    if (!isFinite(D) || Math.abs(D) < 1e-12) return null;
-    const m2 = m.map((row, i) => [row[0], row[1], rhs[i]]);
-    const c2 = det(m2) / D;          // t² 계수
-    const g = -2 * c2;
-    if (!isFinite(g)) return null;
-    return { g, n };
+    if (v > V_OK_MAX) {
+      return { tone: "warn", html:
+        "<b>예상보다 높습니다.</b> 이 조건이면 보통 <b>20~34 m/s</b>입니다. "
+        + "그래프에서 <b>혼자 뾰족하게 솟은 점</b>이 없는지, "
+        + "<b>2단계 기준 물체가 로켓 궤도와 같은 거리</b>에 있었는지 확인해 보세요." };
+    }
+    if (v < V_LOW) {
+      return { tone: "warn", html:
+        "<b>예상보다 많이 낮습니다.</b> 이 조건이면 보통 <b>20~34 m/s</b>입니다. "
+        + "<b>연소가 끝나는 순간</b>(물이 다 빠지는 지점)이 추적 구간에 들어 있는지 확인하세요. "
+        + "그 부근이 비어 있으면 최고 속력을 놓칩니다." };
+    }
+    if (v < V_OK_MIN) {
+      return { tone: "", html:
+        "<b>예상 범위보다 조금 낮습니다.</b> 이 조건이면 보통 20~34 m/s입니다. "
+        + "물의 양이나 압력이 계획보다 적었다면 그럴 수 있습니다." };
+    }
+    return { tone: "ok", html:
+      "<b>예상 범위 안입니다.</b> 1.5 L 페트병 · 물 30~40% · 3~4기압이면 보통 20~34 m/s입니다." };
   }
 
   /** 한 지점의 속력·높이·경과시간. 속력은 이동평균이 아니라 원래 값을 쓴다. */
@@ -1008,7 +1059,7 @@
       document.querySelectorAll(".btn-copy").forEach((b) => (b.disabled = true));
       probeBox.hidden = true;
       probeEmpty.hidden = false;
-      gCheck.hidden = true;
+      plausibility.hidden = true;
       setStepState(5, "대기");
       drawGraph();
       return;
@@ -1029,36 +1080,14 @@
     }
     resAngle.textContent = angleTxt;
 
-    // 중력 검산 — 측정이 옳다면 자유비행 구간의 연직 가속도가 9.8이어야 한다
-    const gm = measuredGravity();
-    if (!gm) {
-      gCheck.hidden = true;
+    // 발사속력이 학생 발사 조건에서 나올 수 있는 값인지만 본다
+    const pl = checkPlausibility(peak.speed);
+    if (!pl) {
+      plausibility.hidden = true;
     } else {
-      gCheck.hidden = false;
-      const ratio = gm.g / 9.8;
-      const off = Math.abs(ratio - 1) * 100;
-      let verdict, tone;
-      if (off <= 15) { verdict = "측정이 물리와 잘 맞습니다."; tone = ""; }
-      else {
-        // 입력값에 "곱해서" 고칠 수를 알려준다 — 「몇 배 틀렸다」는 방향이 헷갈린다.
-        const cScale = (1 / ratio).toFixed(2);          // 2단계 기준 길이에 곱할 수
-        const tScale = Math.sqrt(1 / ratio).toFixed(2); // 1단계 촬영 fps에 곱할 수
-        const dir = ratio > 1 ? "크게" : "작게";
-        // 시간 오류는 제곱으로 들어가므로 2배 넘게 어긋나면 fps 쪽을 먼저 의심한다.
-        const fpsFirst = ratio >= 2 || ratio <= 0.5;
-        verdict = "<b>어긋납니다.</b> 속력도 같은 비율로 틀어져 있습니다. "
-          + (fpsFirst
-              ? "이만큼 크게 어긋나는 건 대개 <b>1단계 촬영 fps</b>입니다 (시간은 제곱으로 들어갑니다). "
-                + "fps에 <b>×" + tScale + "</b>을 하면 9.8이 됩니다. "
-                + "fps가 맞다면 2단계 기준 길이에 <b>×" + cScale + "</b>."
-              : "기준 길이를 실제보다 <b>" + dir + "</b> 잡았을 때 나오는 값입니다. "
-                + "2단계 기준 길이에 <b>×" + cScale + "</b>을 하면 9.8이 됩니다. "
-                + "기준선이 맞다면 1단계 fps에 <b>×" + tScale + "</b>.");
-        tone = "warn";
-      }
-      gCheck.className = "callout " + tone;
-      gCheck.innerHTML = "<b>중력 검산</b> 자유비행 구간(" + gm.n + "점)에서 잰 연직 가속도 = <b>"
-        + gm.g.toFixed(1) + " m/s&sup2;</b> · 참값 9.8 m/s&sup2; &rarr; " + verdict;
+      plausibility.hidden = false;
+      plausibility.className = "callout " + pl.tone;
+      plausibility.innerHTML = pl.html;
     }
 
     // 살펴보기 — 클릭한 지점이 있을 때만
@@ -1606,6 +1635,19 @@
     resampleBtn.disabled = false;
     // setTarget이 먼저 실행될 때는 아직 범위가 없어 3단계를 완료로 못 찍는다. 여기서 마무리.
     if (state.target) { markDone(3); setStepState(3, "완료"); }
+    captureBlobRef();
+  }
+
+  /**
+   * 지금 프레임에서 실제로 잡히는 덩어리 크기를 기록해 둔다.
+   * 추적 중 "이보다 훨씬 작아진 검출"을 걸러내는 기준이 된다(가짜 점 방지).
+   * 색·범위·허용오차·선명도가 바뀔 때마다 다시 잰다.
+   */
+  function captureBlobRef() {
+    if (!state.target || !state.roi || !state.loaded) { state.blobRef = null; return; }
+    const info = buildMask(state.roi);
+    const b = info ? findBlob(info) : null;
+    state.blobRef = b ? b.size : null;
   }
 
   /** 권장 반지름 — 한 프레임에 움직이는 거리의 3배. 기준 길이를 입력해야 계산된다. */
@@ -1707,6 +1749,10 @@
 
   /** 현재 프레임에 손으로 점을 찍는다. 손찍기 모드면 곧바로 다음 프레임으로 넘어간다. */
   function placeManualPoint(nx, ny) {
+    /* 프레임 이동이 끝나기 전에 또 클릭하면 currentFrame()이 아직 이전 값이라
+       **같은 프레임에 덮어써진다**. 클릭은 사라지고 점은 앞으로만 가서
+       "프레임은 안 흘렀는데 로켓만 전진한" 꼴이 되어 속력이 부풀려진다. */
+    if (state.seekingManual) return;
     const f = currentFrame();
     state.points.set(f, { x: nx, y: ny, manual: true });
     // 찍은 자리로 범위도 옮겨 둔다 — 여기서 자동 추적을 이어갈 수 있게
@@ -1721,7 +1767,12 @@
     computeResults();
 
     if (state.manual && f < state.frameCount - 1) {
-      gotoFrame(f + 1).then(() => { updateTransport(); redraw(); });
+      state.seekingManual = true;
+      gotoFrame(f + 1).then(() => {
+        state.seekingManual = false;
+        updateTransport();
+        redraw();
+      }, () => { state.seekingManual = false; });
     } else {
       redraw();
     }
@@ -2030,6 +2081,17 @@
     setMode(state.mode === "ground" ? null : "ground", "지면 높이를 클릭하세요");
   });
 
+  /* ⓘ 도움말 — 접었다 폈다. 펼쳐 두면 3단계가 한 화면을 넘겨서 접어 둔다. */
+  document.querySelectorAll(".info-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const panel = document.getElementById(btn.dataset.help);
+      if (!panel) return;
+      const open = panel.hidden;
+      panel.hidden = !open;
+      btn.classList.toggle("is-open", open);
+    });
+  });
+
   swatchRow.addEventListener("click", (ev) => {
     const btn = ev.target.closest(".swatch");
     if (!btn || !state.loaded) return;
@@ -2047,6 +2109,7 @@
     if (!state.roi) return;
     state.roi.r = Number(roiRadius.value);
     updateRoiReadout();
+    captureBlobRef();
     redraw();
   });
 
@@ -2067,8 +2130,8 @@
     redraw();
   });
 
-  hueTol.addEventListener("input", () => { hueTolVal.textContent = hueTol.value + "°"; redraw(); });
-  satMin.addEventListener("input", () => { satMinVal.textContent = Number(satMin.value).toFixed(2); redraw(); });
+  hueTol.addEventListener("input", () => { hueTolVal.textContent = hueTol.value + "°"; captureBlobRef(); redraw(); });
+  satMin.addEventListener("input", () => { satMinVal.textContent = Number(satMin.value).toFixed(2); captureBlobRef(); redraw(); });
   maskToggle.addEventListener("change", redraw);
 
   trackBtn.addEventListener("click", () => runTracking(null));

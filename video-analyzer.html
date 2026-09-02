@@ -99,10 +99,16 @@
 
           <div class="field-row">
             <label for="shotFps">촬영 프레임레이트</label>
-            <div class="num-input"><input type="number" id="shotFps" min="1" max="1000" step="1" value="240" /><span class="unit">fps</span></div>
+            <div class="num-input"><input type="number" id="shotFps" min="1" max="1000" step="1" placeholder="직접 입력" /><span class="unit">fps</span></div>
           </div>
           <p class="field-hint">휴대폰 카메라에서 <b>몇 fps로 찍었는지</b>만 넣으면 됩니다.
             슬로모로 찍었다면 그 값(120 · 240 등)입니다. 보통 촬영이면 60 또는 30입니다.</p>
+          <!-- 기본값을 두지 않는다. 값이 미리 채워져 있으면 학생이 손대지 않고 지나가는데,
+               이 값이 틀리면 속력이 통째로 틀어지면서 화면에는 아무 표시도 나지 않는다. -->
+          <div class="callout warn" id="fpsNeeded">
+            <b>촬영 프레임레이트를 입력해야 다음 단계로 넘어갑니다.</b>
+            휴대폰 카메라 설정에서 확인하세요. 이 값이 틀리면 속력이 전부 틀어집니다.
+          </div>
 
           <!-- MP4/MOV가 아니거나 파싱이 실패했을 때만 쓰는 수동 입력 -->
           <div id="fallbackBox" hidden>
@@ -188,7 +194,15 @@
           </div>
           <input type="range" id="roiRadius" min="8" max="400" step="1" value="60" disabled />
 
-          <p class="field-hint">색이 잘못 잡혔으면 아래에서 고르세요. (범위는 그대로 유지됩니다)</p>
+          <p class="field-hint label-with-help">색이 잘못 잡혔으면 아래 <b>테이프 색</b>에서 고르세요.
+            <button class="info-btn" type="button" data-help="helpSwatch" aria-label="테이프 색 설명">i</button></p>
+          <div class="help-panel" id="helpSwatch" hidden>
+            <p>많이 쓰는 <b>형광 테이프 색 5가지</b>입니다. 누르면 <b>찾는 색만</b> 그 색으로 바뀌고,
+              <b>추적 범위(원)는 그대로 유지</b>됩니다.</p>
+            <p>영상에서 드래그해 색을 집을 때 테이프가 아니라 <b>반사광이나 배경</b>이 잡히는 일이 흔합니다.
+              그럴 때 다시 드래그하지 말고 여기서 고르는 편이 빠릅니다.</p>
+            <p class="tip">고른 뒤 아래 <b>검출 결과 겹쳐 보기</b>로 실제로 로켓이 칠해지는지 꼭 확인하세요.</p>
+          </div>
           <div class="swatch-row" id="swatchRow">
             <button class="swatch" type="button" data-color="#ff5a00" style="--sw:#ff5a00" aria-label="형광 주황"></button>
             <button class="swatch" type="button" data-color="#ff2d78" style="--sw:#ff2d78" aria-label="형광 분홍"></button>
@@ -198,18 +212,45 @@
           </div>
 
           <div class="field-row">
-            <label for="hueTol">허용 오차</label>
+            <span class="label-with-help"><label for="hueTol">허용 오차</label>
+              <button class="info-btn" type="button" data-help="helpHue" aria-label="허용 오차 설명">i</button></span>
             <span class="val mono" id="hueTolVal">20&deg;</span>
+          </div>
+          <div class="help-panel" id="helpHue" hidden>
+            <p>고른 색에서 <b>얼마나 벗어난 색까지</b> 같은 색으로 볼지 정합니다.</p>
+            <p><b>좁히면(작게)</b> 그 색만 정확히 찾습니다. 엉뚱한 물체를 잡을 일은 줄지만,
+              로켓이 멀어져 색이 흐려지면 놓칩니다.<br />
+              <b>넓히면(크게)</b> 흐릿해져도 따라가지만, 배경의 비슷한 색을 로켓으로 착각할 수 있습니다.</p>
+            <p class="tip">20°로 시작 → 자꾸 놓치면 30~40° → 엉뚱한 데를 잡으면 10~15°</p>
           </div>
           <input type="range" id="hueTol" min="4" max="60" step="1" value="20" disabled />
 
           <div class="field-row">
-            <label for="satMin">최소 선명도</label>
+            <span class="label-with-help"><label for="satMin">최소 선명도</label>
+              <button class="info-btn" type="button" data-help="helpSat" aria-label="최소 선명도 설명">i</button></span>
             <span class="val mono" id="satMinVal">0.35</span>
+          </div>
+          <div class="help-panel" id="helpSat" hidden>
+            <p>색이 <b>얼마나 진해야</b> 로켓으로 인정할지 정합니다.
+              하늘·구름·흰 물줄기·회색 건물처럼 <b>색기가 옅은 것</b>은 이 값으로 걸러집니다.</p>
+            <p class="tip">하늘을 배경으로 찍었다면 <b>과감히 낮추세요 (0.15~0.20)</b>.
+              하늘 자체가 선명도가 낮아서, 낮춰도 하늘을 잘못 잡지 않으면서
+              <b>멀어져 색이 옅어진 로켓을 살릴 수 있습니다.</b></p>
+            <p>잔디·건물처럼 <b>색이 뚜렷한 배경</b> 앞이라면 반대로 0.40~0.50으로 올리세요.</p>
           </div>
           <input type="range" id="satMin" min="0.05" max="0.9" step="0.01" value="0.35" disabled />
 
-          <label class="check"><input type="checkbox" id="maskToggle" disabled /> <span>검출 결과 겹쳐 보기</span></label>
+          <div class="label-with-help">
+            <label class="check"><input type="checkbox" id="maskToggle" disabled /> <span>검출 결과 겹쳐 보기</span></label>
+            <button class="info-btn" type="button" data-help="helpMask" aria-label="검출 결과 겹쳐 보기 설명">i</button>
+          </div>
+          <div class="help-panel" id="helpMask" hidden>
+            <p>지금 설정으로 <b>어떤 픽셀을 로켓 색으로 보는지</b> 영상 위에 칠해서 보여줍니다.
+              켜 두고 위 두 슬라이더를 움직이며 <b>로켓만 칠해지고 배경은 안 칠해지는 지점</b>을 찾으세요.</p>
+            <p class="warn-line"><b>⚠️ 가까울 때와 멀 때를 모두 확인하세요.</b>
+              발사 직후 프레임에만 맞춰 두면, 로켓이 멀어져 작고 흐려졌을 때 놓칩니다.
+              <b>추적이 중간에 끊기는 가장 흔한 원인입니다.</b></p>
+          </div>
           <p class="field-hint mono" id="maskReadout">&ndash;</p>
           <button class="btn btn-primary block step-next" id="next3" data-next="4" type="button" disabled>확인 · 4단계로</button>
 
@@ -225,6 +266,10 @@
         </button>
         <div class="step-body">
           <button class="btn btn-primary block" id="trackBtn" type="button" disabled>자동 추적 시작</button>
+          <!-- 손으로 점을 찍은 뒤 이 버튼을 누르면 처음부터 다시 시작한다.
+               이어서 하려면 아래 [이 프레임부터 다시 추적]이어야 한다 — 혼동이 잦아 못박아 둔다. -->
+          <p class="field-hint">이 버튼은 <b>추적 구간의 처음부터</b> 다시 시작합니다.
+            멈춘 자리에서 <b>이어서</b> 하려면 아래 <b>[이 프레임부터 다시 추적]</b>을 쓰세요.</p>
           <div class="progress" id="progressWrap" hidden><div class="progress-fill" id="progressFill"></div></div>
           <p class="field-hint mono" id="trackReadout">아직 추적하지 않았습니다.</p>
 
@@ -293,7 +338,7 @@
               </div>
             </div>
             <p class="field-hint mono" id="resAngle">&ndash;</p>
-            <div class="callout" id="gCheck" hidden></div>
+            <div class="callout" id="plausibility" hidden></div>
           </div>
 
           <!-- 가변: 그래프에서 클릭한 지점 -->

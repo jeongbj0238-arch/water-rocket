@@ -548,5 +548,50 @@ body[data-page="video-analyzer"] .btn-secondary.is-armed { background: var(--acc
 
 @media (max-width: 1099px) {
   .va-layout { grid-template-columns: minmax(0, 1fr); }
-  .privacy-note { display: none; }
+  /* ⚠️ 좁은 화면에서도 「영상은 전송되지 않는다」는 안내는 남긴다.
+     학생이 제일 먼저 묻는 것이라 숨기면 안 된다. */
 }
+
+/* ---------- ⓘ 도움말 ----------
+   슬라이더가 무슨 일을 하는지 모르면 학생은 손을 못 댄다.
+   그렇다고 설명을 펼쳐 두면 3단계가 길어져 한 화면을 넘긴다. 그래서 접어 둔다. */
+
+.label-with-help { display: inline-flex; align-items: center; gap: 6px; }
+
+.info-btn {
+  width: 17px; height: 17px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: var(--surface, #fff);
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.info-btn:hover { border-color: var(--accent); color: var(--accent); }
+.info-btn.is-open { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.help-panel {
+  margin: 6px 0 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--accent-faint, #f0f6fd);
+  border: 1px solid var(--accent-soft, #d6e6f8);
+  font-size: 12.2px;
+  line-height: 1.6;
+  color: var(--steel);
+}
+.help-panel b { color: var(--ink); }
+.help-panel p { margin: 0 0 6px; }
+.help-panel p:last-child { margin-bottom: 0; }
+.help-panel .tip { color: var(--accent); font-weight: 600; }
+.help-panel .warn-line { color: #8a5a00; }
+
+/* 발사속력 타당성 — 예상 범위 안이면 조용한 초록, 벗어나면 노랑 */
+.callout.ok { background: #eef7ee; color: #2c5530; }
+.callout.ok b { color: #1f4423; }
