@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>물로켓 영상 분석 · 물리 시뮬레이터</title>
+<meta name="description" content="발사 영상 속 색 테이프를 추적해 물로켓의 발사속력·높이·시간을 구하는 브라우저 영상 분석 도구. 영상은 외부로 전송되지 않습니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/theme.css" />
+<link rel="stylesheet" href="video-analyzer.css" />
+</head>
+<body data-page="video-analyzer">
+
+<div class="page">
+
+  <header class="topbar">
+    <div class="brand">
+      <div>
+        <span class="eyebrow">영상 분석 · Video tracking</span>
+        <h1>물로켓 영상 분석</h1>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span class="privacy-note">영상은 이 브라우저 안에서만 처리됩니다</span>
+      <a class="back-link" href="water-rocket-v2.html">물로켓 실험실</a>
+      <a class="back-link" href="index.html">&larr; 목록</a>
+    </div>
+  </header>
+
+  <main class="va-layout">
+
+    <!-- ==================== 영상 스테이지 ==================== -->
+    <section class="stage-col">
+
+      <div class="stage" id="stage">
+        <video id="video" playsinline muted preload="auto"></video>
+        <canvas id="overlay"></canvas>
+
+        <div class="stage-drop" id="stageDrop">
+          <div class="drop-inner">
+            <div class="drop-icon">&#9654;</div>
+            <p class="drop-title">발사 영상을 여기에 끌어다 놓으세요</p>
+            <p class="drop-sub">또는 오른쪽 <b>영상 선택</b> 버튼을 누르세요 · mp4 / mov / webm</p>
+          </div>
+        </div>
+
+        <div class="stage-mode" id="stageMode" hidden></div>
+        <div class="stage-busy" id="stageBusy" hidden><span class="spin"></span>추적 중…</div>
+      </div>
+
+      <div class="transport">
+        <button class="tp-btn tp-play" id="playBtn" type="button" disabled aria-label="재생/일시정지">&#9654;</button>
+        <button class="tp-btn" id="prevFrameBtn" type="button" disabled aria-label="이전 프레임">&#9664;|</button>
+        <button class="tp-btn" id="nextFrameBtn" type="button" disabled aria-label="다음 프레임">|&#9654;</button>
+        <input type="range" id="scrubber" class="scrubber" min="0" max="1000" value="0" step="1" disabled aria-label="재생 위치" />
+        <select id="rateSelect" class="tp-rate" aria-label="재생 속도" disabled>
+          <option value="1">&times;1</option>
+          <option value="0.5">&times;0.5</option>
+          <option value="0.25">&times;0.25</option>
+          <option value="0.1">&times;0.1</option>
+          <option value="step8">8 f/s</option>
+          <option value="step4">4 f/s</option>
+          <option value="step2">2 f/s</option>
+        </select>
+        <span class="tp-time mono" id="timeReadout">0.000 / 0.000 s</span>
+        <span class="tp-frame mono" id="frameReadout">f 0</span>
+      </div>
+
+      <div class="range-bar">
+        <span class="range-label">추적 구간</span>
+        <button class="btn-mini" id="setStartBtn" type="button" disabled>여기를 시작으로</button>
+        <button class="btn-mini" id="setEndBtn" type="button" disabled>여기를 끝으로</button>
+        <button class="btn-mini" id="gotoStartBtn" type="button" disabled title="추적 구간의 시작 프레임으로 이동">&#8676; 시작으로 이동</button>
+        <button class="btn-mini" id="gotoEndBtn" type="button" disabled title="추적 구간의 끝 프레임으로 이동">끝으로 이동 &#8677;</button>
+        <span class="range-readout mono" id="rangeReadout">전체</span>
+        <button class="btn-mini ghost" id="clearRangeBtn" type="button" disabled>구간 해제</button>
+        <label class="check"><input type="checkbox" id="loopRange" checked /> <span>구간만 반복 재생</span></label>
+      </div>
+
+    </section>
+
+    <!-- ==================== 단계 패널 ==================== -->
+    <aside class="panel-col" id="panelCol">
+
+      <!-- 1 영상 불러오기 -->
+      <section class="step-card open" data-step="1">
+        <button class="step-head" type="button">
+          <span class="step-no">1</span>
+          <span class="step-name">영상 불러오기</span>
+          <span class="step-state" id="state1">대기</span>
+        </button>
+        <div class="step-body">
+          <input type="file" id="fileInput" accept="video/*" hidden />
+          <button class="btn btn-primary block" id="pickBtn" type="button">영상 선택</button>
+
+          <p class="field-hint" id="fpsDetected">영상을 불러오면 파일에서 프레임 정보를 직접 읽습니다.</p>
+
+          <div class="field-row">
+            <label for="shotFps">촬영 프레임레이트</label>
+            <div class="num-input"><input type="number" id="shotFps" min="1" max="1000" step="1" value="240" /><span class="unit">fps</span></div>
+          </div>
+          <p class="field-hint">휴대폰 카메라에서 <b>몇 fps로 찍었는지</b>만 넣으면 됩니다.
+            슬로모로 찍었다면 그 값(120 · 240 등)입니다. 보통 촬영이면 60 또는 30입니다.</p>
+
+          <!-- MP4/MOV가 아니거나 파싱이 실패했을 때만 쓰는 수동 입력 -->
+          <div id="fallbackBox" hidden>
+            <div class="callout warn">
+              <b>파일에서 프레임 정보를 읽지 못했습니다.</b>
+              MP4 · MOV가 아니면 아래 값을 직접 맞춰야 합니다.
+              한 프레임씩 넘겨 보면서 <b>매번 조금씩 움직이는</b> 값을 찾으세요.
+            </div>
+            <div class="field-row">
+              <label for="fpsInput">파일 프레임레이트</label>
+              <div class="num-input"><input type="number" id="fpsInput" min="1" max="1000" step="1" value="30" /><span class="unit">fps</span></div>
+            </div>
+            <div class="field-row">
+              <label for="slowSelect">슬로모 배속</label>
+              <select id="slowSelect">
+                <option value="1">&times;1 (보정 없음)</option>
+                <option value="2">&times;2</option>
+                <option value="4">&times;4</option>
+                <option value="8">&times;8</option>
+              </select>
+            </div>
+          </div>
+
+          <p class="eff-fps" id="effBox">영상을 불러오면 여기에 요약이 나옵니다.</p>
+          <button class="btn btn-primary block step-next" id="next1" data-next="2" type="button" disabled>확인 · 2단계로</button>
+
+        </div>
+      </section>
+
+      <!-- 2 기준 길이 -->
+      <section class="step-card" data-step="2">
+        <button class="step-head" type="button">
+          <span class="step-no">2</span>
+          <span class="step-name">기준 길이 · 지면</span>
+          <span class="step-state" id="state2">대기</span>
+        </button>
+        <div class="step-body">
+          <p class="field-hint">발사대 옆에 세운 <b>기준 물체</b>의 위아래 끝을 영상 위에서 드래그해 선으로 이으세요.</p>
+          <button class="btn btn-secondary block" id="scaleBtn" type="button" disabled>기준선 긋기</button>
+
+          <div class="field-row">
+            <label for="scaleLength">실제 길이</label>
+            <div class="num-input"><input type="number" id="scaleLength" min="0.01" step="0.01" value="1" /><span class="unit">m</span></div>
+          </div>
+          <p class="field-hint mono" id="scaleReadout">기준선이 아직 없습니다.</p>
+
+          <div class="field-row">
+            <label>지면 높이</label>
+            <button class="btn-mini" id="groundBtn" type="button" disabled>직접 지정</button>
+          </div>
+          <p class="field-hint" id="groundReadout">기준선의 <b>아래쪽 끝</b>을 지면으로 봅니다.</p>
+
+          <div class="callout">
+            <b>촬영 주의</b> 카메라는 발사 궤도에 <b>수직</b>으로, 충분히 <b>멀리서</b> 찍어야 합니다.
+            로켓이 카메라 쪽으로 다가오거나 멀어지면 화면상 크기가 변해 속력이 실제보다 작게 나옵니다.
+          </div>
+          <button class="btn btn-primary block step-next" id="next2" data-next="3" type="button" disabled>확인 · 3단계로</button>
+
+        </div>
+      </section>
+
+      <!-- 3 테이프 색 -->
+      <section class="step-card" data-step="3">
+        <button class="step-head" type="button">
+          <span class="step-no">3</span>
+          <span class="step-name">테이프 색 · 추적 범위</span>
+          <span class="step-state" id="state3">대기</span>
+        </button>
+        <div class="step-body">
+          <p class="field-hint">발사 직전 프레임으로 이동한 뒤, <b>테이프 한가운데에서 바깥으로 드래그</b>하세요.
+            시작점의 색을 읽고, 드래그한 길이가 <b>추적 범위의 반지름</b>이 됩니다.</p>
+
+          <button class="btn btn-secondary block" id="pickColorBtn" type="button" disabled>색 &middot; 범위 지정 (영상에서 드래그)</button>
+          <p class="field-hint mono" id="roiReadout">아직 범위가 없습니다.</p>
+          <p class="field-hint" id="roiAdvice"></p>
+
+          <button class="btn btn-secondary block" id="resampleBtn" type="button" disabled>범위 안에서 색만 다시 고르기</button>
+          <p class="field-hint mono" id="colorReadout">&ndash;</p>
+
+          <div class="field-row">
+            <label for="roiRadius">범위 반지름</label>
+            <span class="val mono" id="roiRadiusVal">&ndash;</span>
+          </div>
+          <input type="range" id="roiRadius" min="8" max="400" step="1" value="60" disabled />
+
+          <p class="field-hint">색이 잘못 잡혔으면 아래에서 고르세요. (범위는 그대로 유지됩니다)</p>
+          <div class="swatch-row" id="swatchRow">
+            <button class="swatch" type="button" data-color="#ff5a00" style="--sw:#ff5a00" aria-label="형광 주황"></button>
+            <button class="swatch" type="button" data-color="#ff2d78" style="--sw:#ff2d78" aria-label="형광 분홍"></button>
+            <button class="swatch" type="button" data-color="#8cff1a" style="--sw:#8cff1a" aria-label="형광 연두"></button>
+            <button class="swatch" type="button" data-color="#00c2ff" style="--sw:#00c2ff" aria-label="하늘색"></button>
+            <button class="swatch" type="button" data-color="#ffe600" style="--sw:#ffe600" aria-label="형광 노랑"></button>
+          </div>
+
+          <div class="field-row">
+            <label for="hueTol">허용 오차</label>
+            <span class="val mono" id="hueTolVal">20&deg;</span>
+          </div>
+          <input type="range" id="hueTol" min="4" max="60" step="1" value="20" disabled />
+
+          <div class="field-row">
+            <label for="satMin">최소 선명도</label>
+            <span class="val mono" id="satMinVal">0.35</span>
+          </div>
+          <input type="range" id="satMin" min="0.05" max="0.9" step="0.01" value="0.35" disabled />
+
+          <label class="check"><input type="checkbox" id="maskToggle" disabled /> <span>검출 결과 겹쳐 보기</span></label>
+          <p class="field-hint mono" id="maskReadout">&ndash;</p>
+          <button class="btn btn-primary block step-next" id="next3" data-next="4" type="button" disabled>확인 · 4단계로</button>
+
+        </div>
+      </section>
+
+      <!-- 4 추적 -->
+      <section class="step-card" data-step="4">
+        <button class="step-head" type="button">
+          <span class="step-no">4</span>
+          <span class="step-name">추적하기</span>
+          <span class="step-state" id="state4">대기</span>
+        </button>
+        <div class="step-body">
+          <button class="btn btn-primary block" id="trackBtn" type="button" disabled>자동 추적 시작</button>
+          <div class="progress" id="progressWrap" hidden><div class="progress-fill" id="progressFill"></div></div>
+          <p class="field-hint mono" id="trackReadout">아직 추적하지 않았습니다.</p>
+
+          <button class="btn btn-secondary block" id="manualBtn" type="button" disabled>손으로 찍기 시작</button>
+          <div class="callout">
+            <b>손으로 찍기</b> 켜 두면 영상을 클릭할 때마다 그 자리에 <b>보라색 점</b>이 찍히고
+            <b>자동으로 다음 프레임으로 넘어갑니다.</b> 클릭만 반복하면 한 프레임씩 따라갈 수 있습니다.
+            자동 추적이 잘 안 되는 구간은 이 방법이 가장 확실합니다.
+          </div>
+
+          <div class="callout">
+            <b>범위 안만 봅니다</b> 추적 범위(원)는 로켓을 따라 움직이며,
+            <b>범위 밖의 같은 색은 절대 잡지 않습니다.</b>
+            색을 놓치면 원이 <b>점선</b>으로 바뀌며 잠시 넓어졌다가, 다시 찾으면 원래 크기로 돌아갑니다.
+          </div>
+          <div class="callout">
+            <b>궤적이 튀었을 때</b> 튀기 시작한 <b>점을 클릭</b>하면 그 프레임으로 이동합니다.
+            거기서 <b>[이 점부터 뒤 전부 삭제]</b>를 누르면 그 점과 뒤의 점이 모두 지워지므로,
+            그 프레임부터 <b>손으로 찍기</b>로 이어 가면 됩니다.
+          </div>
+          <div class="btn-row">
+            <button class="btn-mini" id="delFromHereBtn" type="button" disabled>이 점부터 뒤 전부 삭제</button>
+            <button class="btn-mini" id="retrackBtn" type="button" disabled>이 프레임부터 다시 추적</button>
+            <button class="btn-mini" id="delPointBtn" type="button" disabled>이 프레임 점만 삭제</button>
+            <button class="btn-mini ghost" id="clearPointsBtn" type="button" disabled>전체 지우기</button>
+          </div>
+          <button class="btn btn-primary block step-next" id="next4" data-next="5" type="button" disabled>확인 · 5단계로</button>
+
+        </div>
+      </section>
+
+      <!-- 5 결과 -->
+      <section class="step-card" data-step="5">
+        <button class="step-head" type="button">
+          <span class="step-no">5</span>
+          <span class="step-name">발사속력 결과</span>
+          <span class="step-state" id="state5">대기</span>
+        </button>
+        <div class="step-body">
+          <div class="graph-wrap"><canvas id="graph"></canvas></div>
+          <p class="field-hint">속력이 가장 커진 지점이 <b>발사속력</b>입니다. 그래프를 클릭해 지점을 직접 고를 수도 있습니다.</p>
+          <div class="callout">
+            <b>왜 조금 낮게 나올까?</b> 속력은 앞뒤 프레임의 이동거리로 구하므로,
+            물이 다 빠지는 <b>꺾이는 순간</b>은 원래보다 조금 완만하게 측정됩니다.
+            30 fps면 약 <b>5%</b>, 120 fps면 약 <b>1%</b> 낮게 나옵니다. 느리게 찍을수록 정확합니다.
+          </div>
+
+          <!-- 고정: 자동으로 찾은 최고 속력. 그래프를 클릭해도 바뀌지 않는다. -->
+          <div class="res-block peak-block">
+            <div class="rb-head"><span class="rb-dot peak"></span>발사속력<span class="rb-tag" id="peakTag">자동 판정</span></div>
+            <button class="btn-mini" id="autoPeakBtn" type="button" hidden>자동 판정으로 되돌리기</button>
+            <div class="peak-main">
+              <span class="peak-val mono" id="resSpeed">&ndash;</span>
+              <button class="btn-copy" type="button" data-copy="resSpeed" disabled>복사</button>
+            </div>
+            <div class="result-list">
+              <div class="result-item">
+                <span class="r-label">그때의 높이</span>
+                <span class="r-value mono" id="resHeight">&ndash;</span>
+                <button class="btn-copy" type="button" data-copy="resHeight" disabled>복사</button>
+              </div>
+              <div class="result-item">
+                <span class="r-label">걸린 시간</span>
+                <span class="r-value mono" id="resTime">&ndash;</span>
+                <button class="btn-copy" type="button" data-copy="resTime" disabled>복사</button>
+              </div>
+            </div>
+            <p class="field-hint mono" id="resAngle">&ndash;</p>
+            <div class="callout" id="gCheck" hidden></div>
+          </div>
+
+          <!-- 가변: 그래프에서 클릭한 지점 -->
+          <div class="res-block probe-block">
+            <div class="rb-head"><span class="rb-dot probe"></span>살펴보기<span class="rb-tag">그래프 클릭</span></div>
+            <p class="field-hint" id="probeEmpty">그래프의 아무 지점이나 클릭하면 그 순간의 값이 여기에 나옵니다.
+              위의 발사속력은 그대로 유지됩니다.</p>
+            <div id="probeBox" hidden>
+              <div class="result-list">
+                <div class="result-item"><span class="r-label">속력</span><span class="r-value mono" id="probeSpeed">&ndash;</span></div>
+                <div class="result-item"><span class="r-label">높이</span><span class="r-value mono" id="probeHeight">&ndash;</span></div>
+                <div class="result-item"><span class="r-label">시간</span><span class="r-value mono" id="probeTime">&ndash;</span></div>
+              </div>
+              <button class="btn-mini" id="setPeakBtn" type="button">이 지점을 발사속력으로</button>
+            </div>
+          </div>
+
+          <button class="btn btn-primary block" id="copyAllBtn" type="button" disabled>발사속력 세 값 한꺼번에 복사</button>
+          <a class="btn btn-secondary block link-btn" href="water-rocket-v2.html">물로켓 실험실에 입력하러 가기 &rarr;</a>
+        </div>
+      </section>
+
+    </aside>
+
+  </main>
+
+</div>
+
+<script src="shared/sim-utils.js"></script>
+<script src="video-analyzer.js"></script>
+</body>
+</html>

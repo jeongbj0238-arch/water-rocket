@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>물로켓 발사 실험실 (v2) · 물리 시뮬레이터</title>
+<meta name="description" content="실제 발사 → 영상 분석 → 이론 계산 → 시뮬레이션 비교 순서로 물로켓의 포물선 운동과 역학적 에너지를 다루는 수행평가용 시뮬레이션" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/theme.css" />
+<link rel="stylesheet" href="water-rocket-v2.css" />
+</head>
+<body data-page="water-rocket">
+
+<div class="page">
+
+  <header class="topbar">
+    <div class="brand">
+      <div>
+        <span class="eyebrow">역학 · 포물선 운동과 에너지</span>
+        <h1>물로켓 발사 실험실</h1>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <a class="back-link" href="index.html">&larr; 목록</a>
+      <button class="btn btn-ghost" id="teacherToggle" type="button">⚙ 교사 설정</button>
+    </div>
+  </header>
+
+  <nav class="steps" id="steps">
+    <button class="step active" data-tab="record" type="button">
+      <span class="step-no">1</span>
+      <span class="step-txt"><b>실험 기록</b>쏘고, 재고, 영상 분석</span>
+    </button>
+    <button class="step" data-tab="theory" type="button">
+      <span class="step-no">2</span>
+      <span class="step-txt"><b>이론 계산</b>발사속력으로 계산</span>
+    </button>
+    <button class="step" data-tab="sim" type="button">
+      <span class="step-no">3</span>
+      <span class="step-txt"><b>시뮬레이션</b>조건으로 예측</span>
+    </button>
+    <button class="step" data-tab="compare" type="button">
+      <span class="step-no">4</span>
+      <span class="step-txt"><b>비교하기</b>세 값을 맞대본다</span>
+    </button>
+  </nav>
+
+  <main class="layout">
+
+    <!-- ============ 1 · 실험 기록 ============ -->
+    <section class="tab-panel active" id="tabRecord">
+      <div class="record-grid">
+
+        <div class="card input-card">
+          <h3><span class="num">①</span> 실험 조건</h3>
+          <p class="card-desc">실제로 발사할 때 사용한 조건을 그대로 입력하세요.</p>
+          <div class="control-group">
+            <div class="control-row"><label for="waterInput">물의 양</label>
+              <span class="control-value" id="waterValue">500 mL</span></div>
+            <input type="range" id="waterInput" min="50" max="1500" step="10" value="500" />
+          </div>
+          <div class="control-group">
+            <div class="control-row"><label for="pressureInput">공기 압력</label>
+              <span class="control-value" id="pressureValue">3.0 atm</span></div>
+            <input type="range" id="pressureInput" min="1" max="10" step="0.1" value="3" />
+          </div>
+          <div class="control-group">
+            <div class="control-row"><label for="angleInput">발사 각도</label>
+              <span class="control-value" id="angleValue">60°</span></div>
+            <input type="range" id="angleInput" min="20" max="90" step="1" value="60" />
+          </div>
+        </div>
+
+        <div class="card input-card">
+          <h3><span class="num">②</span> 운동장에서 잰 값</h3>
+          <p class="card-desc">줄자와 스톱워치로 측정한 결과입니다.</p>
+          <div class="measure-item">
+            <label for="realRange">도달 거리 <span class="must">필수</span></label>
+            <div class="measure-input"><input type="number" id="realRange" step="0.1" min="0" placeholder="예: 29.5" /><span class="unit">m</span></div>
+            <span class="measure-how">발사대에서 떨어진 지점까지</span>
+          </div>
+          <div class="measure-item">
+            <label for="realTime">비행 시간 <span class="must">필수</span></label>
+            <div class="measure-input"><input type="number" id="realTime" step="0.1" min="0" placeholder="예: 3.5" /><span class="unit">s</span></div>
+            <span class="measure-how">3명이 스톱워치로 재어 평균</span>
+          </div>
+          <div class="measure-item">
+            <label for="realHeight">최고 높이 <span class="opt">선택</span></label>
+            <div class="measure-input"><input type="number" id="realHeight" step="0.1" min="0" placeholder="예: 14.0" /><span class="unit">m</span></div>
+            <span class="measure-how">각도계로 h = d·tanθ</span>
+          </div>
+        </div>
+
+        <div class="card input-card video-card">
+          <h3><span class="num">③</span> 영상 분석 — 발사속력</h3>
+          <p class="card-desc">
+            발사 장면 영상을 <b>영상 분석 도구</b>로 열어 로켓에 감은 색 테이프를 추적하면
+            <b>속력이 가장 빨라지는 순간</b>의 값을 얻을 수 있습니다.
+          </p>
+          <a class="btn btn-primary block-link" href="video-analyzer.html">영상 분석 도구 열기 &rarr;</a>
+          <div class="ai-guide">
+            <b>촬영 요령</b>
+            <ol>
+              <li>로켓에 <b>눈에 띄는 색 테이프</b>를 감습니다. 하늘·잔디와 겹치지 않는 색이 좋습니다.</li>
+              <li>발사대 옆에 <b>길이를 아는 물체</b>(1 m 막대 등)를 세워 함께 찍습니다.</li>
+              <li><b>슬로모션(120 fps 이상)</b>으로 촬영합니다. (물이 빠지는 시간은 0.5초 안팎)</li>
+              <li>카메라는 발사 궤도에 <b>수직</b>으로, 충분히 <b>멀리서</b> 놓습니다.</li>
+              <li>도구가 준 값이 <b>타당한지 직접 확인</b>하세요. (예: 사람이 던진 공보다 훨씬 빠른가?)</li>
+            </ol>
+          </div>
+          <div class="measure-item">
+            <label for="videoSpeed">발사속력 <span class="must">필수</span></label>
+            <div class="measure-input"><input type="number" id="videoSpeed" step="0.1" min="0" placeholder="예: 27.5" /><span class="unit">m/s</span></div>
+            <span class="measure-how">속력이 커지다가 <b>줄어들기 직전</b>의 값</span>
+          </div>
+          <div class="measure-item">
+            <label for="videoHeight">그때의 높이 <span class="must">필수</span></label>
+            <div class="measure-input"><input type="number" id="videoHeight" step="0.01" min="0" placeholder="예: 4.06" /><span class="unit">m</span></div>
+          </div>
+          <div class="measure-item">
+            <label for="videoTime">그때까지 걸린 시간 <span class="opt">선택</span></label>
+            <div class="measure-input"><input type="number" id="videoTime" step="0.01" min="0" placeholder="예: 0.44" /><span class="unit">s</span></div>
+          </div>
+        </div>
+
+      </div>
+      <div class="record-status" id="recordStatus">필수 항목을 모두 입력하면 2단계로 넘어갈 수 있습니다.</div>
+    </section>
+
+    <!-- ============ 2 · 이론 계산 ============ -->
+    <section class="tab-panel" id="tabTheory">
+      <div class="empty-box" id="theoryEmpty">
+        <p><b>1단계</b>에서 실측값과 영상 분석 결과를 먼저 입력하세요.</p>
+      </div>
+
+      <div class="analyze-grid hidden" id="theoryGrid">
+        <div class="canvas-card card">
+          <canvas id="theoryCanvas"></canvas>
+          <div class="canvas-tag badge">영상 분석 발사속력으로 그린 이론 궤적</div>
+          <div class="legend">
+            <span><i class="sw sw-real"></i>1단계 · 같은 높이로 돌아올 때까지</span>
+            <span><i class="sw sw-ground"></i>2단계 · 지면까지 더 떨어지는 구간</span>
+          </div>
+        </div>
+
+        <div class="analyze-side">
+          <div class="moment card">
+            <div class="moment-head">🎬 계산에 쓰는 값</div>
+            <p class="moment-desc">
+              이 순간부터 물로켓은 <b>비스듬히 던진 공과 똑같이</b> 움직입니다.
+              공기 저항을 무시하고 계산해 봅시다.
+              <b>각도만 발사대 설정값</b>이고, 나머지는 영상 분석에서 온 값입니다.
+            </p>
+            <div class="fact-row four">
+              <div class="fact"><span class="fact-label">속력 v <span class="src">영상</span></span><span class="fact-value" id="factSpeed">–</span></div>
+              <div class="fact"><span class="fact-label">각도 θ <span class="src">발사대</span></span><span class="fact-value" id="factAngle">–</span></div>
+              <div class="fact"><span class="fact-label">높이 h <span class="src">영상</span></span><span class="fact-value" id="factHeight">–</span></div>
+              <div class="fact"><span class="fact-label">v<sub>x</sub> / v<sub>y</sub></span><span class="fact-value small" id="factComp">–</span></div>
+            </div>
+          </div>
+
+          <div class="convert card">
+            <div class="convert-head">계산을 두 단계로 나눕니다</div>
+            <div class="stage-box">
+              <span class="stage-no a">1</span>
+              <div>
+                <b>같은 높이로 돌아올 때까지</b>
+                <p>발사속력을 얻은 <b>그 지점을 기준면</b>으로 보면 출발 높이와 도착 높이가 같아집니다.
+                교과서 공식을 <b>고치지 않고 그대로</b> 쓸 수 있어요.</p>
+                <div class="stage-formula">H = v²sin²θ/2g &nbsp;·&nbsp; R = v²sin2θ/g &nbsp;·&nbsp; T = 2v sinθ/g</div>
+              </div>
+            </div>
+            <div class="stage-box">
+              <span class="stage-no b">2</span>
+              <div>
+                <b>지면까지 더 떨어지는 구간</b>
+                <p>실제로는 그 높이에서 멈추지 않고 <b>h 만큼 더</b> 떨어집니다.</p>
+                <div class="stage-formula">v<sub>y</sub>′ = √(v<sub>y</sub>² + 2gh) &nbsp;→&nbsp; Δt = (v<sub>y</sub>′ − v<sub>y</sub>)/g &nbsp;→&nbsp; Δx = v<sub>x</sub>Δt</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="answer-card card">
+            <button class="btn btn-secondary" id="revealBtn" type="button">계산을 마친 뒤 눌러 확인</button>
+            <div class="answer-body hidden" id="answerBody">
+              <table class="answer-table">
+                <tr><th></th><th>최고 높이</th><th>수평 거리</th><th>시간</th></tr>
+                <tr><td>추진 구간 — 발사대에서 여기까지</td>
+                    <td id="ansPH">–</td><td id="ansPR">–</td><td id="ansPT">–</td></tr>
+                <tr><td>1단계 — 같은 높이까지</td>
+                    <td id="ansAH">–</td><td id="ansAR">–</td><td id="ansAT">–</td></tr>
+                <tr><td>2단계 — 지면까지 더</td>
+                    <td id="ansBH">–</td><td id="ansBR">–</td><td id="ansBT">–</td></tr>
+                <tr class="row-real"><td>합계 — 지면 기준</td>
+                    <td id="ansRH">–</td><td id="ansRR">–</td><td id="ansRT">–</td></tr>
+              </table>
+              <p class="answer-note" id="answerNote"></p>
+            </div>
+          </div>
+
+          <div class="card energy-mini">
+            <h3>역학적 에너지 <span class="sub">기준면 = 발사속력을 얻은 지점</span></h3>
+            <table class="answer-table">
+              <tr><th></th><th>운동 E</th><th>위치 E</th><th>역학적 E</th></tr>
+              <tr><td>발사속력 지점</td><td id="enK1">–</td><td id="enU1">–</td><td id="enE1">–</td></tr>
+              <tr><td>최고점</td><td id="enK2">–</td><td id="enU2">–</td><td id="enE2">–</td></tr>
+            </table>
+            <p class="answer-note" id="energyNote">
+              두 값이 같게 나오면 계산이 맞은 것입니다. 최고점에서 운동 에너지는 <b>0이 아닙니다.</b>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 3 · 시뮬레이션 ============ -->
+    <section class="tab-panel" id="tabSim">
+      <div class="predict-grid">
+        <div class="canvas-card card">
+          <canvas id="simCanvas"></canvas>
+          <div class="canvas-tag badge" id="simTag">발사를 눌러 보세요</div>
+          <div class="big-readout hidden" id="bigReadout">
+            <span class="big-label">시뮬레이션 도달 거리</span>
+            <span class="big-value" id="bigRange">–</span>
+          </div>
+        </div>
+
+        <aside class="student-panel card">
+          <h3>시뮬레이션 예측</h3>
+          <p class="card-desc">
+            1단계에서 입력한 <b>실험 조건</b>(물 <span id="echoWater">–</span>,
+            <span id="echoPressure">–</span>, <span id="echoAngle">–</span>)으로
+            시뮬레이터가 <b>스스로</b> 계산합니다.
+          </p>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="launchBtn" type="button">발사</button>
+            <button class="btn btn-secondary" id="resetBtn" type="button">다시</button>
+          </div>
+
+          <div class="warn hidden" id="simWarn"></div>
+
+          <div class="sim-facts hidden" id="simFacts">
+            <div class="sim-fact-head">시뮬레이션이 계산한 값</div>
+            <table class="answer-table">
+              <tr><td>발사속력 (연소종료)</td><td id="simSpeed">–</td></tr>
+              <tr><td>그때의 높이</td><td id="simHeight">–</td></tr>
+              <tr><td>도달 거리</td><td id="simRange">–</td></tr>
+              <tr><td>비행 시간</td><td id="simTime">–</td></tr>
+              <tr><td>최고 높이</td><td id="simMaxH">–</td></tr>
+            </table>
+          </div>
+
+          <div class="speed-check hidden" id="speedCheck"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ 4 · 비교 ============ -->
+    <section class="tab-panel" id="tabCompare">
+      <div class="empty-box" id="compareEmpty">
+        <p>1단계 입력과 <b>3단계 발사</b>를 마치면 세 값을 비교할 수 있습니다.</p>
+      </div>
+
+      <div class="compare-grid hidden" id="compareGrid">
+
+        <div class="compare-col">
+          <div class="card legend-card">
+            <h3>무엇을 비교하나요?</h3>
+            <div class="cmp-item"><i class="sw sw-ground"></i><div><b>① 실제 측정값</b><span>운동장에서 줄자·스톱워치로 잰 값</span></div></div>
+            <div class="cmp-item"><i class="sw sw-real"></i><div><b>② 영상 속력 이론값</b><span>영상에서 얻은 발사속력으로 공식 계산 (공기 저항 무시)</span></div></div>
+            <div class="cmp-item"><i class="sw sw-sim"></i><div><b>③ 시뮬레이션 예측값</b><span>물·압력·각도 조건에서 시뮬레이터가 계산</span></div></div>
+          </div>
+
+          <div class="card question-card">
+            <h3>💭 생각해 보기</h3>
+            <ol class="question-list" id="questionList"><li>값을 모두 입력하면 질문이 나타납니다.</li></ol>
+          </div>
+        </div>
+
+        <div class="compare-col">
+          <div class="chart-card card">
+            <h3>세 값 비교</h3>
+            <canvas id="compareChart"></canvas>
+          </div>
+
+          <div class="card err-card">
+            <h3>얼마나 차이가 났나</h3>
+            <table class="err-table">
+              <thead><tr><th>항목</th><th>① 실측</th><th>② 영상 이론</th><th>③ 시뮬</th><th>②−① 오차</th></tr></thead>
+              <tbody id="errBody"></tbody>
+            </table>
+            <div class="diagnosis" id="diagnosis">값을 입력하면 진단이 나타납니다.</div>
+          </div>
+        </div>
+
+        <div class="compare-col">
+          <div class="card hypo-card">
+            <h3>🔍 왜 다를까? — 원인을 찾아보자</h3>
+            <p class="hypo-desc">차이가 생긴 원인이라고 생각하는 것에 표시해 보세요.</p>
+            <div class="cause-list">
+              <label class="cause"><input type="checkbox" /><span>공기 저항 — 이론 계산에 넣지 않았다</span></label>
+              <label class="cause"><input type="checkbox" /><span>발사각이 흔들렸다</span></label>
+              <label class="cause"><input type="checkbox" /><span>바람이 불었다</span></label>
+              <label class="cause"><input type="checkbox" /><span>영상 분석 속력이 정확하지 않았다</span></label>
+              <label class="cause"><input type="checkbox" /><span>줄자·스톱워치 측정 오차</span></label>
+            </div>
+            <div class="hypo-test">
+              <p class="hypo-desc">
+                첫 번째 원인이 맞는지 <b>직접 확인</b>해 봅시다.
+                이론 계산에 공기 저항을 넣으면 실측에 가까워질까요?
+              </p>
+              <button class="btn btn-primary" id="dragTestBtn" type="button">공기 저항을 넣고 다시 계산</button>
+              <div class="hypo-result hidden" id="dragResult"></div>
+            </div>
+          </div>
+
+          <div class="chart-card card">
+            <h3>역학적 에너지의 변화</h3>
+            <canvas id="energyChart"></canvas>
+            <div class="legend">
+              <span><i class="sw sw-ke"></i>운동 에너지</span>
+              <span><i class="sw sw-pe"></i>위치 에너지</span>
+            </div>
+            <div class="chart-msg" id="energyMsg"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= 교사 설정 ================= -->
+  <div class="settings-overlay hidden" id="settingsOverlay">
+    <div class="settings-backdrop" id="settingsBackdrop"></div>
+    <aside class="controls card settings-panel">
+      <div class="settings-panel-header">
+        <h2>교사 설정</h2>
+        <button class="settings-close" id="settingsClose" type="button" aria-label="닫기">✕</button>
+      </div>
+      <p class="hint" style="border:none;padding-top:0;">
+        학생 화면에는 물의 양·압력·각도만 보입니다. 아래 값은 수업 전에 맞춰 두세요.
+      </p>
+
+      <div class="control-group">
+        <div class="control-row"><label for="bottleInput">페트병 부피</label>
+          <span class="control-value" id="bottleValue">2000 mL</span></div>
+        <input type="range" id="bottleInput" min="500" max="3000" step="50" value="2000" />
+      </div>
+      <div class="control-group">
+        <div class="control-row"><label for="nozzleInput">노즐 지름</label>
+          <span class="control-value" id="nozzleValue">9 mm</span></div>
+        <input type="range" id="nozzleInput" min="5" max="15" step="0.5" value="9" />
+      </div>
+      <div class="control-group">
+        <div class="control-row"><label for="dryMassInput">로켓 건조질량</label>
+          <span class="control-value" id="dryMassValue">0.100 kg</span></div>
+        <input type="range" id="dryMassInput" min="0.03" max="0.5" step="0.005" value="0.1" />
+        <span class="control-hint needs-measurement">⚠ 물을 뺀 로켓 무게를 저울로 재서 입력</span>
+      </div>
+      <div class="control-group">
+        <div class="control-row"><label for="diameterInput">동체 지름</label>
+          <span class="control-value" id="diameterValue">9 cm</span></div>
+        <input type="range" id="diameterInput" min="6" max="15" step="0.5" value="9" />
+      </div>
+      <div class="control-group">
+        <div class="control-row"><label for="speedSelect">재생 속도</label></div>
+        <select id="speedSelect">
+          <option value="0.5">0.5배</option><option value="1">1배</option>
+          <option value="2" selected>2배</option><option value="4">4배</option>
+        </select>
+      </div>
+      <p class="hint">
+        이론 계산(2단계)과 시뮬레이션 예측(3단계)은 모두 <b>공기 저항 없이</b> 계산합니다.
+        공기 저항은 4단계에서 학생이 원인을 검증하는 버튼으로 확인합니다.
+        가이드막대 0.27 m 고정, 중력가속도 9.8 m/s².
+      </p>
+    </aside>
+  </div>
+
+  <footer class="footer">
+    추진 구간은 발사각 방향 1차원 운동으로, 이후는 포물선 운동으로 계산합니다.
+  </footer>
+
+</div>
+
+<script src="shared/sim-utils.js"></script>
+<script src="water-rocket-v2.js"></script>
+</body>
+</html>

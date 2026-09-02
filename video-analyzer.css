@@ -1,0 +1,552 @@
+/* ============================================================
+   물로켓 영상 분석 — 페이지 전용 스타일
+   디자인 출처: DESIGN-apple.md
+     · 밝은 크롬(#ffffff / #f5f5f7) + 어두운 영상 스테이지(#272729)
+     · 액션 컬러는 Action Blue(#0066cc) 하나뿐
+     · 필(980px) 버튼, 그림자는 영상 스테이지 밑 딱 하나
+   shared/theme.css는 건드리지 않고 body[data-page]에서만 덮어쓴다.
+   ============================================================ */
+
+body[data-page="video-analyzer"] {
+  --accent: #0066cc;
+  --accent-focus: #0071e3;
+  --accent-soft: #d6e6f8;
+  --accent-faint: #f0f6fd;
+
+  --ink: #1d1d1f;
+  --steel: #6e6e73;
+  --muted: #86868b;
+  --hairline: #e0e0e0;
+  --hairline-soft: #f0f0f0;
+
+  --canvas: #ffffff;
+  --surface: #f5f5f7;
+  --surface-pearl: #fafafc;
+
+  --stage: #272729;
+  --stage-deep: #1c1c1e;
+  --on-dark: #ffffff;
+  --on-dark-soft: #cccccc;
+
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Inter, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Apple 특유의 필 반경 */
+  --pill: 980px;
+
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---------- 레이아웃 ---------- */
+
+body[data-page="video-analyzer"] .page {
+  max-width: 1440px;
+  padding: 18px 24px 20px;
+}
+
+.topbar { padding-bottom: 14px; margin-bottom: 16px; }
+body[data-page="video-analyzer"] h1 { font-size: 24px; letter-spacing: -0.6px; }
+body[data-page="video-analyzer"] .eyebrow { letter-spacing: 0.05em; }
+
+.topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.privacy-note {
+  font-size: 12px;
+  color: var(--steel);
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: var(--pill);
+  padding: 7px 14px;
+}
+
+.va-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 372px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* ---------- 영상 스테이지 (유일한 다크 면) ---------- */
+
+.stage-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.stage {
+  position: relative;
+  background: var(--stage);
+  border-radius: 18px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  /* Apple 시스템에서 유일하게 허용되는 그림자 — 제품(영상) 아래 한 겹 */
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+}
+
+.stage video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--stage-deep);
+  display: block;
+}
+
+.stage canvas#overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* 커서는 어느 모드에서도 기본 화살표로 둔다.
+   crosshair/cell은 뾰족한 끝이 어디인지 알기 어렵다는 지적이 있었다. */
+.stage canvas#overlay,
+.stage.is-picking canvas#overlay,
+.stage.is-scaling canvas#overlay,
+.stage.is-editing canvas#overlay { cursor: default; }
+
+.stage-drop {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--on-dark-soft);
+  background: var(--stage);
+  transition: background 0.15s;
+}
+
+.stage-drop.is-over { background: #33333a; }
+.stage-drop[hidden] { display: none; }
+
+.drop-icon {
+  width: 54px; height: 54px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  border: 1.5px solid #5a5a60;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; color: var(--on-dark-soft);
+}
+
+.drop-title { color: var(--on-dark); font-size: 16px; font-weight: 500; margin: 0 0 6px; letter-spacing: -0.2px; }
+.drop-sub { font-size: 13px; margin: 0; color: #9a9aa0; }
+
+.stage-mode {
+  position: absolute;
+  left: 14px; top: 14px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 12.5px;
+  padding: 8px 14px;
+  border-radius: var(--pill);
+  backdrop-filter: saturate(180%) blur(12px);
+}
+.stage-mode[hidden] { display: none; }
+
+.stage-busy {
+  position: absolute;
+  right: 14px; top: 14px;
+  display: flex; align-items: center; gap: 9px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff; font-size: 12.5px;
+  padding: 8px 14px;
+  border-radius: var(--pill);
+}
+.stage-busy[hidden] { display: none; }
+
+.spin {
+  width: 12px; height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: va-spin 0.7s linear infinite;
+}
+@keyframes va-spin { to { transform: rotate(360deg); } }
+
+/* ---------- 트랜스포트 바 (밝은 크롬) ---------- */
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+.tp-btn {
+  flex: 0 0 auto;
+  min-width: 40px;
+  height: 32px;
+  border-radius: var(--pill);
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: 12px;
+  font-family: var(--font-display);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.tp-btn:hover:not(:disabled) { border-color: var(--ink); }
+.tp-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.tp-play { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tp-play:hover:not(:disabled) { background: var(--accent-focus); border-color: var(--accent-focus); }
+
+/* 재생바가 남는 공간을 전부 가져가야 한다. 너비를 안 정해 준 select가
+   free space를 흡수해 재생바가 60px로 짜부라진 적이 있으니 폭을 못 박아 둔다. */
+.scrubber { flex: 1 1 auto; min-width: 220px; }
+
+.tp-rate {
+  flex: 0 0 auto;
+  width: 78px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--ink);
+  cursor: pointer;
+}
+.tp-rate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.tp-time, .tp-frame { flex: 0 0 auto; font-size: 11.5px; color: var(--steel); white-space: nowrap; }
+.tp-frame { color: var(--muted); }
+
+.range-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface-pearl);
+  border: 1px solid var(--hairline-soft);
+  border-radius: 14px;
+  padding: 9px 14px;
+}
+
+.range-label { font-size: 12.5px; color: var(--steel); font-weight: 500; }
+.range-readout { font-size: 12px; color: var(--accent); }
+
+/* ---------- 범위 슬라이더 ---------- */
+
+body[data-page="video-analyzer"] input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: #d2d2d7;
+  outline: none;
+  cursor: pointer;
+}
+body[data-page="video-analyzer"] input[type="range"]:disabled { opacity: 0.4; cursor: not-allowed; }
+body[data-page="video-analyzer"] input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 0.5px solid rgba(0, 0, 0, 0.14);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+}
+body[data-page="video-analyzer"] input[type="range"]::-moz-range-thumb {
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 0.5px solid rgba(0, 0, 0, 0.14);
+  cursor: pointer;
+}
+
+/* ---------- 단계 패널 ---------- */
+
+.panel-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.step-card {
+  background: var(--canvas);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  overflow: hidden;
+  /* 세로 flex 안에서 기본값(shrink:1)이면 카드가 눌리고 overflow:hidden에 잘린다.
+     패널이 대신 스크롤되도록 카드는 제 높이를 지키게 한다. */
+  flex: 0 0 auto;
+}
+
+.step-card.open { border-color: var(--accent-soft); }
+.step-card.done .step-no { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 13px 16px;
+  cursor: pointer;
+  font-family: var(--font-display);
+  text-align: left;
+}
+
+.step-no {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--steel);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.step-name { flex: 1; font-size: 14.5px; font-weight: 500; letter-spacing: -0.2px; }
+.step-state { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); }
+.step-card.done .step-state { color: var(--accent); }
+
+.step-body {
+  display: none;
+  padding: 0 16px 16px;
+  flex-direction: column;
+  gap: 11px;
+}
+.step-card.open .step-body { display: flex; }
+
+/* ---------- 폼 요소 ---------- */
+
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.field-row label { font-size: 13px; color: var(--ink); font-weight: 500; }
+.field-row .val { font-size: 12.5px; color: var(--accent); }
+
+.num-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 5px 10px;
+  background: var(--canvas);
+}
+.num-input:focus-within { border-color: var(--accent); }
+.num-input input {
+  width: 66px;
+  border: 0;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: transparent;
+  text-align: right;
+}
+.num-input .unit { font-size: 11.5px; color: var(--muted); }
+
+body[data-page="video-analyzer"] select {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: var(--canvas);
+  cursor: pointer;
+}
+body[data-page="video-analyzer"] select:focus { outline: none; border-color: var(--accent); }
+
+.field-hint { font-size: 12.2px; color: var(--steel); line-height: 1.55; margin: 0; }
+.field-hint.mono { font-size: 11.5px; color: var(--muted); }
+
+.eff-fps {
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--accent-faint);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin: 0;
+}
+.eff-fps b { color: var(--accent); }
+
+.callout {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--steel);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.callout b { color: var(--ink); }
+.callout.warn { background: #fff6e8; color: #6b4a12; }
+.callout.warn b { color: #8a5a00; }
+
+.check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.check input { accent-color: var(--accent); }
+
+/* ---------- 버튼 ---------- */
+
+body[data-page="video-analyzer"] .btn {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 13.5px;
+  padding: 10px 20px;
+  border-radius: var(--pill);
+  border: 1px solid transparent;
+  cursor: pointer;
+  letter-spacing: -0.1px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+body[data-page="video-analyzer"] .btn.block { width: 100%; display: block; text-align: center; }
+body[data-page="video-analyzer"] .btn:disabled { opacity: 0.38; cursor: not-allowed; }
+
+body[data-page="video-analyzer"] .btn-primary { background: var(--accent); color: #fff; }
+body[data-page="video-analyzer"] .btn-primary:hover:not(:disabled) { background: var(--accent-focus); filter: none; }
+
+body[data-page="video-analyzer"] .btn-secondary { background: var(--canvas); color: var(--ink); border-color: #d2d2d7; }
+body[data-page="video-analyzer"] .btn-secondary:hover:not(:disabled) { background: var(--surface); border-color: var(--ink); }
+
+body[data-page="video-analyzer"] .btn-secondary.is-armed { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.link-btn { text-decoration: none; }
+
+.btn-mini {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 13px;
+  border-radius: var(--pill);
+  border: 1px solid #d2d2d7;
+  background: var(--canvas);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.btn-mini:hover:not(:disabled) { border-color: var(--ink); }
+.btn-mini:disabled { opacity: 0.38; cursor: not-allowed; }
+.btn-mini.ghost { color: var(--steel); }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- 색 스와치 ---------- */
+
+.swatch-row { display: flex; gap: 8px; }
+
+.swatch {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--sw);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  transition: transform 0.12s, border-color 0.12s;
+}
+.swatch:hover { transform: scale(1.08); }
+.swatch.is-active { border-color: var(--ink); }
+
+/* ---------- 진행 바 ---------- */
+
+.progress {
+  height: 4px;
+  border-radius: 2px;
+  background: #e5e5ea;
+  overflow: hidden;
+}
+.progress[hidden] { display: none; }
+.progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.1s linear; }
+
+/* ---------- 결과 ---------- */
+
+.graph-wrap {
+  height: 132px;
+  background: var(--surface-pearl);
+  border: 1px solid var(--hairline-soft);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.graph-wrap canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+/* ---------- 결과 블록 (고정 발사속력 / 가변 살펴보기) ---------- */
+
+.res-block { border: 1px solid var(--hairline); border-radius: 12px; padding: 11px 12px; }
+.peak-block { border-color: var(--accent-soft); background: var(--accent-faint); }
+
+.rb-head {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; font-weight: 500; color: var(--ink); margin-bottom: 9px;
+}
+.rb-tag {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--muted);
+  border: 1px solid var(--hairline); border-radius: var(--pill); padding: 2px 8px;
+}
+.rb-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.rb-dot.peak { background: #ffd60a; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
+.rb-dot.probe { background: var(--accent); }
+
+.peak-main { display: flex; align-items: baseline; gap: 10px; margin-bottom: 9px; }
+.peak-val { font-size: 26px; font-weight: 500; color: var(--accent); letter-spacing: -0.5px; }
+.peak-main .btn-copy { margin-left: auto; }
+
+#probeBox { display: flex; flex-direction: column; gap: 9px; }
+
+.result-list { display: flex; flex-direction: column; gap: 7px; }
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+.r-label { flex: 1; font-size: 12.5px; color: var(--steel); }
+.r-value { font-size: 14.5px; font-weight: 500; color: var(--ink); }
+
+.btn-copy {
+  font-family: var(--font-display);
+  font-size: 11.5px;
+  padding: 4px 11px;
+  border-radius: var(--pill);
+  border: 1px solid var(--hairline);
+  background: var(--canvas);
+  color: var(--steel);
+  cursor: pointer;
+}
+.btn-copy:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn-copy:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-copy.copied { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- 데스크톱: 한 화면 안에 ---------- */
+
+@media (min-width: 1100px) and (min-height: 700px) {
+  body[data-page="video-analyzer"] .page {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .va-layout { flex: 1; min-height: 0; }
+  .stage-col { height: 100%; }
+  .stage { flex: 1; aspect-ratio: auto; min-height: 0; }
+  /* 단계가 5개라 접힘 상태를 기본으로 두고, 열린 카드만 스크롤을 허용한다. */
+  .panel-col { height: 100%; overflow-y: auto; padding-right: 4px; }
+}
+
+@media (max-width: 1099px) {
+  .va-layout { grid-template-columns: minmax(0, 1fr); }
+  .privacy-note { display: none; }
+}

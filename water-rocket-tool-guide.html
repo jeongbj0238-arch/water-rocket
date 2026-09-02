@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>영상 분석 도구 사용법 (한 장 안내)</title>
+<style>
+  :root {
+    --ink:#111; --steel:#555; --muted:#888; --line:#ccc; --line-strong:#666;
+    --accent:#0066cc; --orange:#dd5b00; --green:#0f766e; --fill:#f5f5f5;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; padding:24px; background:#e8e8e8; color:var(--ink);
+    font-family:"Malgun Gothic","맑은 고딕",-apple-system,sans-serif;
+    font-size:10pt; line-height:1.5;
+  }
+  .sheet { background:#fff; max-width:210mm; margin:0 auto 20px; padding:13mm 13mm; }
+
+  h1 { font-size:15pt; margin:0 0 3px; letter-spacing:-0.5px; }
+  .subtitle { color:var(--steel); font-size:9pt; margin:0 0 10px; }
+
+  h2 { font-size:10.5pt; margin:13px 0 6px; padding:4px 9px;
+       background:var(--ink); color:#fff; border-radius:3px; }
+
+  .steps { display:flex; flex-direction:column; gap:6px; }
+  .step { display:flex; gap:9px; border:1px solid var(--line-strong); border-radius:4px; padding:7px 10px; }
+  .step .no {
+    flex:0 0 20px; height:20px; border-radius:50%; background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center; font-size:9.5pt; font-weight:700;
+  }
+  .step .body { flex:1; }
+  .step .t { font-weight:700; font-size:10pt; margin-bottom:2px; }
+  .step .d { font-size:9pt; line-height:1.5; }
+  .step .chk { font-size:8.5pt; color:var(--accent); margin-top:3px; }
+  .step .chk b { color:var(--accent); }
+
+  .btn { display:inline-block; background:var(--fill); border:1px solid var(--line);
+         border-radius:3px; padding:0 5px; font-size:8.5pt; }
+
+  .two { display:flex; gap:9px; }
+  .two > div { flex:1; }
+
+  table { width:100%; border-collapse:collapse; margin:5px 0; }
+  th,td { border:1px solid var(--line-strong); padding:4px 7px; font-size:9pt; vertical-align:top; }
+  th { background:var(--fill); font-weight:600; text-align:left; }
+
+  .warn { border:1.5px solid var(--orange); border-radius:4px; padding:7px 10px; font-size:9pt; }
+  .warn .wt { color:var(--orange); font-weight:700; margin-bottom:3px; }
+
+  .good { border:1.5px solid var(--green); border-radius:4px; padding:7px 10px; font-size:9pt; }
+  .good .gt { color:var(--green); font-weight:700; margin-bottom:3px; }
+
+  ul { margin:3px 0; padding-left:16px; }
+  li { margin-bottom:2px; }
+
+  .toolbar { max-width:210mm; margin:0 auto 12px; display:flex; gap:10px; align-items:center; font-size:10pt; }
+  .toolbar button { font-family:inherit; font-size:10pt; padding:7px 14px;
+                    border:1px solid var(--ink); background:#fff; border-radius:4px; cursor:pointer; }
+  .toolbar button:hover { background:var(--ink); color:#fff; }
+  .toolbar .tip { color:#555; font-size:9pt; }
+  .toolbar .back { color:var(--steel); text-decoration:none; font-size:10pt; padding:7px 4px; }
+  .toolbar .back:hover { color:var(--ink); text-decoration:underline; }
+
+  /* A4 한 장에 담기 위한 압축 — 화면·인쇄 모두 같은 밀도로 둔다 */
+  body { font-size:9pt; line-height:1.34; }
+  h1 { font-size:14pt; }
+  h2 { font-size:10pt; margin:7px 0 3px; padding:3px 8px; }
+  .steps { gap:4px; }
+  .step { padding:5px 9px; gap:8px; }
+  .step .t { font-size:9.5pt; margin-bottom:1px; }
+  .step .d { font-size:8.5pt; line-height:1.36; }
+  .step .chk { font-size:8pt; margin-top:2px; }
+  .step .no { flex:0 0 18px; height:18px; font-size:9pt; }
+  th,td { padding:3px 6px; font-size:8.5pt; }
+  .warn, .good { padding:6px 9px; font-size:8.5pt; }
+  .two { gap:8px; }
+  ul { padding-left:15px; }
+  li { margin-bottom:1px; }
+
+  @media print {
+    body { background:#fff; padding:0; }
+    .toolbar { display:none; }
+    .sheet { max-width:none; margin:0; padding:0; }
+    h2, th, .step .no, .warn, .good, .btn {
+      -webkit-print-color-adjust:exact; print-color-adjust:exact;
+    }
+    h2 { page-break-after:avoid; }
+    .step, .warn, .good, table { page-break-inside:avoid; }
+  }
+  @page { size:A4; margin:12mm; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <!-- 배포본에만 있는 링크. 인쇄할 때는 .toolbar 자체가 숨겨지므로 종이에는 안 나온다. -->
+  <a class="back" href="index.html">&larr; 목록</a>
+  <button onclick="window.print()" type="button">인쇄 / PDF 저장</button>
+  <span class="tip">※ A4 한 장 · 인쇄 대화상자에서 <b>배경 그래픽</b>을 켜야 색이 나옵니다.</span>
+</div>
+
+<div class="sheet">
+
+  <h1>영상 분석 도구 사용법</h1>
+  <p class="subtitle">발사 영상에서 <b>발사속력</b>을 구하는 다섯 단계 &nbsp;·&nbsp; 물로켓 수행평가용</p>
+
+  <h2>먼저 &mdash; 촬영이 결과를 좌우합니다</h2>
+  <div class="two">
+    <div class="good">
+      <div class="gt">✔ 이렇게 찍으세요</div>
+      <ul>
+        <li>로켓에 <b>눈에 띄는 색 테이프</b>를 감는다 (하늘·흙과 겹치지 않는 색)</li>
+        <li><b>기준 물체를 로켓이 날아갈 자리 옆</b>에 세운다</li>
+        <li>카메라는 궤도에 <b>수직</b>으로 <b>멀리서</b>, <b>슬로모 240 fps</b></li>
+      </ul>
+    </div>
+    <div class="warn">
+      <div class="wt">✘ 이러면 값이 틀어집니다</div>
+      <ul>
+        <li>기준 물체가 <b>카메라에 더 가까이</b> → 속력이 <b>부풀려짐</b></li>
+        <li>비스듬히 찍으면 → 실제보다 <b>짧게</b> 측정</li>
+        <li>30 fps로 찍으면 → 연소 구간이 <b>10프레임</b>도 안 됨</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>다섯 단계</h2>
+  <div class="steps">
+
+    <div class="step">
+      <div class="no">1</div>
+      <div class="body">
+        <div class="t">영상 불러오기</div>
+        <div class="d">영상을 <b>끌어다 놓거나</b> <span class="btn">영상 선택</span>. 그다음
+          <b>촬영 프레임레이트</b>에 실제로 찍은 값(슬로모면 <b>240</b>)을 넣습니다.
+          프레임 개수와 시간은 파일에서 저절로 읽습니다.</div>
+        <div class="chk">✓ <b>확인</b> &mdash; "실제 동작 ○○초 · 슬로우 ×8" 이 그럴듯한가?</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="no">2</div>
+      <div class="body">
+        <div class="t">기준 길이 · 지면</div>
+        <div class="d"><span class="btn">기준선 긋기</span>를 누르고 기준 물체의 <b>위끝에서 아래끝까지</b>
+          드래그한 뒤 <b>실제 길이(m)</b>를 입력합니다. 지면은 기준선의 아래쪽 끝으로 자동 설정되며,
+          다르면 <span class="btn">직접 지정</span>으로 고칩니다.</div>
+        <div class="chk">✓ <b>여기가 가장 많이 틀리는 곳</b> &mdash; 이 값이 틀리면 속력이 통째로 틀어집니다.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="no">3</div>
+      <div class="body">
+        <div class="t">테이프 색 · 추적 범위</div>
+        <div class="d">발사 직전 프레임으로 간 뒤 <b>테이프 한가운데에서 바깥으로 드래그</b>합니다.
+          시작점의 색을 읽고, 드래그한 길이가 <b>추적 범위</b>가 됩니다.
+          드래그하는 동안 <b>돋보기</b>가 떠서 어떤 색을 집을지 미리 보여 줍니다.</div>
+        <div class="chk">✓ 돋보기의 <b>선명도가 0.3 이상</b>인 밝은 지점을 고를 것 &nbsp;/&nbsp;
+          <span class="btn">검출 결과 겹쳐 보기</span>를 켜서 <b>테이프만</b> 칠해지는지 확인</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="no">4</div>
+      <div class="body">
+        <div class="t">추적하기</div>
+        <div class="d">재생바 아래에서 <b>추적 구간</b>을 발사 앞뒤로 좁힌 뒤
+          <span class="btn">자동 추적 시작</span>. 재생 속도를 <b>2~4 f/s</b>로 두면 추적 과정을
+          눈으로 따라갈 수 있습니다.</div>
+        <div class="chk">✓ 궤적이 튀면 → <b>튄 점을 클릭</b>(그 프레임으로 이동) →
+          <span class="btn">이 점부터 뒤 전부 삭제</span> → <span class="btn">손으로 찍기 시작</span>으로 이어 찍기</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="no">5</div>
+      <div class="body">
+        <div class="t">발사속력 읽기</div>
+        <div class="d">속력–시간 그래프에서 <b>가장 커진 지점</b>이 발사속력입니다(금색 표시).
+          <b>발사속력 · 그때의 높이 · 걸린 시간</b> 세 값을 <span class="btn">복사</span>해
+          활동지와 시뮬레이터 1단계에 적습니다.</div>
+        <div class="chk">✓ 그래프가 <b>올라갔다 내려오는 모양</b>이어야 합니다.
+          끝까지 올라가기만 하면 추적을 더 이어야 합니다.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2>내 측정이 맞는지 확인하는 법 &mdash; 중력 검산</h2>
+  <p style="margin:3px 0 5px;">
+    물이 다 빠진 뒤 로켓은 <b>중력만</b> 받으므로 연직 가속도가 반드시 <b>9.8 m/s²</b>여야 합니다.
+    도구가 이 값을 스스로 재어 알려 줍니다 &mdash; <b>이 숫자 하나로 내 측정이 맞는지 알 수 있습니다.</b>
+  </p>
+  <table>
+    <tr><th style="width:24%;">나온 값</th><th>할 일</th></tr>
+    <tr><td><b>9.8 근처</b></td><td>측정이 물리와 맞습니다. 그대로 진행하세요.</td></tr>
+    <tr><td><b>9.8보다 크다</b></td>
+        <td>대개 <b>2단계 기준선</b>이 원인입니다. 기준 길이를 <b>실제보다 크게</b> 잡으면
+            거리가 부풀려지고, 그래서 <b>속력도 중력도 같이 커집니다.</b> 기준 물체가 로켓 궤도와
+            <b>같은 거리</b>에 있었는지 확인하고 다시 그으세요.</td></tr>
+    <tr><td><b>9.8보다 작다</b></td>
+        <td>같은 이유의 반대입니다 &mdash; 기준 길이를 <b>실제보다 작게</b> 잡은 것입니다.
+            역시 2단계 기준선을 다시 그으세요.</td></tr>
+    <tr><td><b>많이 다르다</b><br>(2배 이상)</td>
+        <td>기준선이 아니라 1단계 <b>촬영 fps</b> 쪽일 수 있습니다. 시간은 <b>제곱</b>으로 들어가서
+            fps가 틀리면 훨씬 크게 어긋납니다. 도구가 알려 주는 배수를 보고 고치세요.</td></tr>
+  </table>
+
+  <h2>잘 안 될 때</h2>
+  <table>
+    <tr><th style="width:28%;">증상</th><th>해결</th></tr>
+    <tr><td>테이프가 거의 안 잡힘</td>
+        <td><b>최소 선명도를 먼저 낮춘다</b> (0.35 → 0.2 → 0.12). 그래도 안 되면 허용 오차를 키운다.
+            어두운 영상은 대개 선명도가 원인.</td></tr>
+    <tr><td>배경까지 잡힘</td>
+        <td>최소 선명도를 <b>올리고</b> 허용 오차를 줄인다. 추적 범위도 줄인다.</td></tr>
+    <tr><td>로켓이 범위를 벗어남</td>
+        <td>3단계 <b>범위 반지름</b>을 키운다 (권장값이 화면에 안내됨).</td></tr>
+    <tr><td>도무지 자동이 안 됨</td>
+        <td><b>손으로 찍기</b>로 갑니다. 클릭하면 다음 프레임으로 자동으로 넘어가므로 연소 구간
+            70~80프레임을 클릭만으로 따라갈 수 있고, <b>정확도는 자동과 같습니다.</b></td></tr>
+  </table>
+
+  <p style="margin-top:6px;font-size:8pt;color:#666;">
+    ※ 영상은 <b>이 브라우저 안에서만</b> 처리되며 어디로도 전송되지 않습니다. &nbsp;·&nbsp;
+    단축키 &mdash; <b>← →</b> 한 프레임, <b>Shift+← →</b> 10프레임, <b>Space</b> 재생/정지, <b>Esc</b> 손찍기 종료
+  </p>
+
+</div>
+
+</body>
+</html>

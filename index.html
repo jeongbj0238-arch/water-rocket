@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>물로켓 수행평가 · 학생용 도구</title>
+<meta name="description" content="물로켓 발사 영상을 분석해 발사속력을 구하고, 시뮬레이션과 비교하는 학생용 도구 모음" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/theme.css" />
+<style>
+  /* 기존 허브(index.html)와 같은 Notion 계열 카드 레이아웃을 이 페이지 한정으로 쓴다. */
+
+  body[data-page="hub"] {
+    --accent: var(--notion-blue);
+    --accent-soft: var(--notion-blue-soft);
+    --font-display: 'Inter', -apple-system, sans-serif;
+    --paper: #f6f5f4;
+    background: var(--paper);
+  }
+
+  body[data-page="hub"] .page { max-width: 1120px; }
+
+  body[data-page="hub"] h1,
+  body[data-page="hub"] h2 { font-family: var(--font-display); letter-spacing: -0.02em; }
+
+  .topbar .eyebrow { font-family: var(--font-mono); }
+
+  .hub-hero { padding: 20px 0 28px; }
+  .hub-hero h1 { font-size: 34px; font-weight: 700; margin-top: 10px; letter-spacing: -0.03em; }
+  .hub-hero p { color: var(--ink-muted, var(--steel)); font-size: 15.5px; max-width: 620px; margin-top: 12px; line-height: 1.6; }
+
+  /* 순서 안내 — 학생이 어느 도구를 먼저 열어야 하는지 헷갈리지 않게 */
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 22px;
+  }
+  .flow-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    color: var(--ink);
+  }
+  .flow-step b { font-weight: 600; }
+  .flow-no {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px; height: 20px;
+    border-radius: 9999px;
+    background: #eef0f2;
+    color: #545a60;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .flow-arrow { color: #b6bbc0; font-size: 13px; }
+
+  .sim-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+  }
+
+  .sim-card {
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: var(--ink);
+    background: #ffffff;
+    padding: 26px;
+    border-radius: 12px;
+    border: 1px solid var(--hairline);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02), 0 4px 10px rgba(0, 0, 0, 0.03);
+    transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  }
+
+  .sim-card:hover {
+    border-color: var(--card-accent, var(--ink));
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03), 0 10px 22px rgba(0, 0, 0, 0.06);
+  }
+
+  .sim-card .tag {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--card-accent, var(--steel));
+    background: var(--card-accent-soft, var(--surface));
+    padding: 4px 10px;
+    border-radius: 9999px;
+    margin-bottom: 14px;
+  }
+
+  .sim-card h2 { font-size: 19px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .sim-card p { font-size: 13.5px; color: var(--ink-muted, var(--steel)); line-height: 1.6; margin: 0 0 18px; flex: 1; }
+
+  .sim-card .go {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--card-accent, var(--ink));
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .sim-card.coral { --card-accent: #dd5b00; --card-accent-soft: #fdf1e7; }
+  .sim-card.steel { --card-accent: #0066cc; --card-accent-soft: #eaf2fb; }
+  .sim-card.slate { --card-accent: #545a60; --card-accent-soft: #eef0f2; }
+
+  /* 영상이 업로드되지 않는다는 사실은 학생이 제일 궁금해하는 것이라 눈에 띄게 둔다. */
+  .privacy {
+    margin-top: 26px;
+    background: #ffffff;
+    border: 1px solid var(--hairline);
+    border-left: 3px solid #0066cc;
+    border-radius: 10px;
+    padding: 16px 20px;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: var(--ink-muted, var(--steel));
+  }
+  .privacy b { color: var(--ink); font-weight: 600; }
+
+  body[data-page="hub"] .footer {
+    margin-top: 36px;
+    padding: 24px 0 4px;
+    border-top: 1px solid var(--hairline);
+    color: var(--ink-muted, var(--muted));
+    font-size: 13px;
+  }
+</style>
+</head>
+<body data-page="hub">
+
+<div class="page">
+
+  <header class="topbar">
+    <div class="brand">
+      <div>
+        <span class="eyebrow">물로켓 수행평가</span>
+        <h1 style="font-size:20px;">학생용 도구</h1>
+      </div>
+    </div>
+  </header>
+
+  <section class="hub-hero">
+    <h1>내가 쏜 물로켓, 얼마나 빨랐을까?</h1>
+    <p>발사 영상에서 직접 속력을 재고, 같은 조건으로 계산한 시뮬레이션과 비교해 봅니다.
+       두 값이 다르다면 <b>왜 다른지</b>가 이 활동의 핵심입니다.</p>
+  </section>
+
+  <div class="flow">
+    <span class="flow-step"><span class="flow-no">1</span><b>발사 장면 촬영</b></span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step"><span class="flow-no">2</span><b>영상 분석 도구</b>로 발사속력 재기</span>
+    <span class="flow-arrow">→</span>
+    <span class="flow-step"><span class="flow-no">3</span><b>시뮬레이터</b>에 같은 조건을 넣고 비교</span>
+  </div>
+
+  <section class="sim-grid">
+
+    <a class="sim-card steel" href="video-analyzer.html">
+      <span class="tag">2단계 · 영상 분석</span>
+      <h2>물로켓 영상 분석 도구</h2>
+      <p>발사 영상 속 색 테이프를 프레임마다 자동으로 추적해 <b>발사속력·높이·걸린 시간</b>을 구합니다.
+         자동 추적이 잘 안 되면 손으로 찍어도 결과는 같습니다.</p>
+      <span class="go">분석 도구 열기 →</span>
+    </a>
+
+    <a class="sim-card coral" href="water-rocket-v2.html">
+      <span class="tag">3단계 · 시뮬레이션</span>
+      <h2>물로켓 발사 시뮬레이터</h2>
+      <p>압력·물의 양·발사각을 넣으면 이론적인 발사속력과 궤적을 계산합니다.
+         측정값과 나란히 놓고 <b>얼마나, 왜 다른지</b> 확인합니다.</p>
+      <span class="go">시뮬레이터 열기 →</span>
+    </a>
+
+    <a class="sim-card slate" href="water-rocket-tool-guide.html">
+      <span class="tag">참고 · 한 장 안내</span>
+      <h2>영상 분석 도구 사용법</h2>
+      <p>다섯 단계를 순서대로 정리한 안내입니다. 막혔을 때 여기부터 보세요.
+         내 측정이 맞는지 확인하는 <b>중력 검산</b> 읽는 법도 들어 있습니다.</p>
+      <span class="go">사용법 보기 →</span>
+    </a>
+
+  </section>
+
+  <p class="privacy">
+    <b>내 영상은 어디로도 전송되지 않습니다.</b>
+    분석은 전부 지금 쓰는 이 브라우저 안에서 이루어지고, 영상 파일이 인터넷으로 올라가는 일은 없습니다.
+    창을 닫으면 그대로 사라지므로, 결과는 <b>닫기 전에 활동지에 적어 두세요.</b>
+  </p>
+
+  <footer class="footer">물로켓 수행평가 · 학생용 도구 모음</footer>
+
+</div>
+
+</body>
+</html>
