@@ -16,20 +16,13 @@
   "use strict";
 
   const WORK_MAX_W = 720;   // 픽셀 분석 해상도 상한 (프레임당 연산량 제한)
-  const MIN_BLOB_PX = 3;    // 이보다 작은 색 덩어리는 노이즈로 본다 (절대 하한)
-  /* ⚠️ 3픽셀은 너무 관대하다. 로켓이 흐려지면 제대로 된 덩어리는 못 잡아도
-     자국 끄트머리나 얼룩 3픽셀은 통과해서, **로켓보다 뒤처진 가짜 점**이 기록됐다.
-     그 점 하나가 다음 정상 점과 이어지며 가짜 최고속력을 만든다.
-     그래서 "직전까지 잡히던 크기"를 따라가며 급격히 작아진 검출은 놓침으로 돌린다.
-     로켓이 멀어져 서서히 작아지는 것은 BLOB_TRACK_A로 따라가므로 막지 않는다. */
-  /* ⚠️ 크기는 **축소된 작업 캔버스**(WORK_MAX_W=720) 기준이다. 1920 영상이면 면적이 0.14배로
-     줄어드니 하한을 크게 잡으면 안 된다. 처음에 8px/25%로 잡았다가 추적이 통째로 죽었다. */
-  const BLOB_MIN_ABS = 4;      // 어떤 경우에도 이보다 작으면 인정하지 않는다
-  const BLOB_MIN_REL = 0.15;   // 직전까지 잡히던 크기의 이 비율 미만이면 놓침
-  const BLOB_TRACK_A = 0.3;    // 기준 크기를 새 값 쪽으로 얼마나 끌어당길지
-  /* 못 잡는 동안 기준을 계속 낮춘다. 이게 없으면 한 번 걸러진 뒤 기준이 높은 채로 남아
-     **영원히 회복하지 못한다**(원만 커지며 끝까지 못 잡는 증상). */
-  const BLOB_RELAX = 0.8;
+  const MIN_BLOB_PX = 3;    // 이보다 작은 색 덩어리는 노이즈로 본다
+  /* ⚠️ 여기에 「너무 작아진 검출은 버린다」는 필터를 넣었다가 **되돌렸다**(2026-09-02).
+     의도는 옳았다 — 흐려진 로켓 대신 자국 3픽셀을 잡아 가짜 최고속력을 만드는 일이 있었다.
+     그런데 실제 수업 영상에서는 **테이프 자체가 축소 캔버스에서 1~3픽셀로만 잡힌다.**
+     (WORK_MAX_W=720이라 1920 영상이면 면적이 0.14배가 된다.)
+     그래서 어떤 문턱을 걸어도 정상 검출까지 같이 죽었다 — 70프레임 중 64프레임이 버려졌다.
+     **이 방향으로 다시 시도하지 말 것.** 가짜 최고속력은 checkPlausibility가 잡는다. */
 
   /* 추적 범위(ROI) — 범위 밖 픽셀은 아예 읽지 않는다.
      놓친 프레임마다 반지름을 키워 잠깐의 모션 블러/가림을 넘긴다. */
@@ -155,7 +148,6 @@
     groundManual: false,
 
     target: null,       // { h, s, v, hex }
-    blobRef: null,      // 색·범위를 고른 시점에 실제로 잡힌 덩어리 크기(px). 가짜 검출 판정 기준
     roi: null,          // 사용자가 그린 기준 범위 { x, y, r } (natural px)
     mode: null,         // 'scale' | 'color' | 'recolor' | 'ground' | null
     dragging: null,
@@ -656,7 +648,6 @@
     trackBtn.disabled = !state.roi;
     if (state.roi) { markDone(3); setStepState(3, "완료"); }
     else setStepState(3, "범위 필요");
-    captureBlobRef();
     redraw();
   }
 
@@ -819,11 +810,7 @@
     let radius = baseR;
     // 이어서 시작할 때는 직전 점에서, 처음이면 사용자가 그린 원에서 출발한다.
     let center = prev ? { x: prev.x, y: prev.y } : { x: state.roi.x, y: state.roi.y };
-    let found = 0, missed = 0, tooSmall = 0;
-
-    /* 검출 크기의 기준. 색·범위를 고를 때 실제로 잡힌 덩어리 크기에서 출발하고,
-       추적하면서 서서히 따라간다(로켓은 멀어질수록 작아지므로). */
-    let sizeRef = state.blobRef || null;
+    let found = 0, missed = 0;
 
     const paceMs = trackPaceMs();
 
@@ -850,17 +837,7 @@
       }
 
       const maskInfo = buildMask(roi);
-      const raw = maskInfo ? findBlob(maskInfo) : null;
-
-      /* 너무 작아진 검출은 로켓이 아니라 자국·얼룩일 가능성이 크다.
-         점으로 남기면 뒤처진 가짜 위치가 되어 가짜 최고속력을 만든다 → 차라리 놓침으로 둔다. */
-      let blob = raw;
-      if (raw && sizeRef != null) {
-        const floor = Math.max(BLOB_MIN_ABS, sizeRef * BLOB_MIN_REL);
-        if (raw.size < floor) { blob = null; tooSmall++; }
-      } else if (raw && raw.size < BLOB_MIN_ABS) {
-        blob = null; tooSmall++;
-      }
+      const blob = maskInfo ? findBlob(maskInfo) : null;
 
       if (blob) {
         state.points.set(f, { x: blob.x, y: blob.y, manual: false });
@@ -868,16 +845,12 @@
         prev2 = prev;
         prev = blob;
         radius = baseR;              // 찾았으니 원래 크기로 복귀
-        // 멀어지며 서서히 작아지는 것은 따라간다
-        sizeRef = sizeRef == null ? blob.size : sizeRef * (1 - BLOB_TRACK_A) + blob.size * BLOB_TRACK_A;
         found++;
       } else {
         // 범위 밖은 보지 않는다. 대신 잠시 넓히며 예측 위치로 계속 전진한다.
         state.rois.set(f, { x: roi.x, y: roi.y, r: radius, grown: true });
         radius = Math.min(maxR, radius * ROI_GROW);
         if (prev) { prev2 = prev; prev = { x: center.x, y: center.y }; }
-        // 못 잡는 동안 크기 기준도 함께 낮춰야 다시 잡을 수 있다
-        if (sizeRef != null) sizeRef = Math.max(BLOB_MIN_ABS, sizeRef * BLOB_RELAX);
         missed++;
       }
 
@@ -902,11 +875,8 @@
     progressWrap.hidden = true;
 
     trackReadout.textContent = "찾음 " + found + "프레임 · 놓침 " + missed + "프레임"
-      + (tooSmall ? " (그중 " + tooSmall + "은 너무 작아 버림)" : "")
       + (missed > found * 0.3
-          ? (tooSmall > missed * 0.5
-              ? "  ← 로켓이 작아져 색을 못 잡습니다. 3단계 최소 선명도를 낮춰 보세요"
-              : "  ← 범위를 키우거나 허용 오차를 넓혀 보세요")
+          ? "  ← 3단계에서 최소 선명도를 낮추거나, 허용 오차·범위를 넓혀 보세요"
           : "");
     delPointBtn.disabled = false;
     clearPointsBtn.disabled = false;
@@ -1642,19 +1612,6 @@
     resampleBtn.disabled = false;
     // setTarget이 먼저 실행될 때는 아직 범위가 없어 3단계를 완료로 못 찍는다. 여기서 마무리.
     if (state.target) { markDone(3); setStepState(3, "완료"); }
-    captureBlobRef();
-  }
-
-  /**
-   * 지금 프레임에서 실제로 잡히는 덩어리 크기를 기록해 둔다.
-   * 추적 중 "이보다 훨씬 작아진 검출"을 걸러내는 기준이 된다(가짜 점 방지).
-   * 색·범위·허용오차·선명도가 바뀔 때마다 다시 잰다.
-   */
-  function captureBlobRef() {
-    if (!state.target || !state.roi || !state.loaded) { state.blobRef = null; return; }
-    const info = buildMask(state.roi);
-    const b = info ? findBlob(info) : null;
-    state.blobRef = b ? b.size : null;
   }
 
   /** 권장 반지름 — 한 프레임에 움직이는 거리의 3배. 기준 길이를 입력해야 계산된다. */
@@ -2116,7 +2073,6 @@
     if (!state.roi) return;
     state.roi.r = Number(roiRadius.value);
     updateRoiReadout();
-    captureBlobRef();
     redraw();
   });
 
@@ -2137,8 +2093,8 @@
     redraw();
   });
 
-  hueTol.addEventListener("input", () => { hueTolVal.textContent = hueTol.value + "°"; captureBlobRef(); redraw(); });
-  satMin.addEventListener("input", () => { satMinVal.textContent = Number(satMin.value).toFixed(2); captureBlobRef(); redraw(); });
+  hueTol.addEventListener("input", () => { hueTolVal.textContent = hueTol.value + "°"; redraw(); });
+  satMin.addEventListener("input", () => { satMinVal.textContent = Number(satMin.value).toFixed(2); redraw(); });
   maskToggle.addEventListener("change", redraw);
 
   trackBtn.addEventListener("click", () => runTracking(null));
