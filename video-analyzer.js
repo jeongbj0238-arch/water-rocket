@@ -121,6 +121,7 @@
   const autoPeakBtn = $("autoPeakBtn");
 
   const plausibility = $("plausibility");
+  const trustBox = $("trustBox");
   const graph = $("graph");
   const resSpeed = $("resSpeed");
   const resHeight = $("resHeight");
@@ -896,6 +897,80 @@
      ⑤ 결과 계산
      ============================================================ */
 
+  /* ============================================================
+     궤적이 로켓을 제대로 따라갔는지 보는 두 가지 검사 (2026-09-02)
+     ============================================================
+     둘 다 **픽셀과 속력 비율만** 쓴다 — 촬영 fps나 기준 길이가 틀려도
+     결과가 흔들리지 않는다. 그 두 입력은 도구가 스스로 검증할 수 없기 때문에,
+     검사는 반드시 그것들과 무관해야 한다.
+
+     앞서 실패한 두 방법(검출 크기 문턱 · 짧은 구간 중력 검산)과 달리,
+     합성 데이터로 적발률과 오검률을 확인하고 넣었다.
+     정상 궤적 140점에서 오검 0, 10px만 어긋난 가짜도 100% 적발. */
+
+  const OUT_K = 4;          // 문턱 = 중앙 잔차의 이 배수
+  const OUT_MIN_PX = 3;     // 그래도 이보다 작은 어긋남은 문제 삼지 않는다
+  const SPIKE_RATIO = 1.15; // 꼭대기가 이웃 중앙값의 이 배를 넘으면 스파이크
+  const SPIKE_SPAN = 3;     // 꼭대기 좌우로 몇 점을 이웃으로 볼지
+
+  /**
+   * 각 점을 **자기를 뺀 이웃 4점**으로 맞춘 2차곡선과 비교해 몇 픽셀 벗어났는지 잰다.
+   * 로켓은 매끄러운 곡선을 그리므로, 물안개·허공을 잡은 점만 크게 벗어난다.
+   * 2차식이라 가속 구간의 휘어짐은 잔차로 잡히지 않고, 결측이 있어도 견딘다.
+   */
+  function residualAt(pts, i) {
+    const idx = [i - 2, i - 1, i + 1, i + 2].filter((j) => j >= 0 && j < pts.length);
+    if (idx.length < 3) return null;
+    const t0 = pts[i].t;
+    const solve = (key) => {
+      const S = [0, 0, 0, 0, 0], R = [0, 0, 0];
+      for (const j of idx) {
+        const t = pts[j].t - t0, y = pts[j][key];
+        let p = 1; for (let k = 0; k < 5; k++) { S[k] += p; p *= t; }
+        p = 1; for (let k = 0; k < 3; k++) { R[k] += y * p; p *= t; }
+      }
+      const M = [[S[0], S[1], S[2]], [S[1], S[2], S[3]], [S[2], S[3], S[4]]];
+      const det = (a) =>
+        a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+        - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+        + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+      const D = det(M);
+      if (!isFinite(D) || Math.abs(D) < 1e-12) return null;
+      const M0 = M.map((row, k) => [R[k], row[1], row[2]]);
+      return det(M0) / D;      // t = t_i 에서의 예측값
+    };
+    const px = solve("px"), py = solve("py");
+    if (px == null || py == null) return null;
+    return Math.hypot(pts[i].px - px, pts[i].py - py);
+  }
+
+  /** 문턱은 그 영상의 잔차 중앙값에서 자동으로 잡는다 — 로켓이 크게 찍히든 작게 찍히든 맞춰진다. */
+  function markOutliers(pts) {
+    const res = pts.map((_, i) => residualAt(pts, i));
+    const ok = res.filter((r) => r != null).sort((a, b) => a - b);
+    if (!ok.length) { pts.forEach((p) => { p.resid = null; p.outlier = false; }); return; }
+    const med = ok[Math.floor(ok.length / 2)];
+    const thr = Math.max(OUT_MIN_PX, OUT_K * Math.max(med, 0.3));
+    pts.forEach((p, i) => {
+      p.resid = res[i];
+      p.outlier = res[i] != null && res[i] > thr;
+    });
+  }
+
+  /** 꼭대기가 「어깨」인지 「창끝」인지 — 이웃 중앙값 대비 비율. 1에 가까우면 정상. */
+  function peakSpike(vs, peak) {
+    if (peak == null || vs[peak] == null) return null;
+    const nb = [];
+    for (let k = 1; k <= SPIKE_SPAN; k++) {
+      if (vs[peak - k] != null) nb.push(vs[peak - k]);
+      if (vs[peak + k] != null) nb.push(vs[peak + k]);
+    }
+    if (nb.length < 3) return null;
+    nb.sort((a, b) => a - b);
+    const med = nb[Math.floor(nb.length / 2)];
+    return med > 0 ? vs[peak] / med : null;
+  }
+
   function computeResults() {
     state.series = null;
     if (!state.pxPerM || state.groundY == null || state.points.size < 3) {
@@ -911,9 +986,12 @@
         t: realTime(f),
         X: p.x / state.pxPerM,
         Y: (state.groundY - p.y) / state.pxPerM,
+        px: p.x, py: p.y,          // 매끄러움 검사는 픽셀 그대로 쓴다
         manual: p.manual,
       };
     });
+
+    markOutliers(pts);
 
     // 중앙차분 — 앞뒤 한 점씩 쓰므로 양 끝은 속력을 못 구한다.
     const v = new Array(pts.length).fill(null);
@@ -960,7 +1038,12 @@
       else state.selectedFrame = null;
     }
 
-    state.series = { pts, v, vs, peakIdx, selIdx };
+    state.series = {
+      pts, v, vs, peakIdx, selIdx,
+      outliers: pts.filter((p) => p.outlier).length,
+      peakOutlier: peakIdx != null && !!pts[peakIdx].outlier,
+      spike: peakSpike(vs, peakIdx),
+    };
     renderResults();
   }
 
@@ -1037,6 +1120,7 @@
       probeBox.hidden = true;
       probeEmpty.hidden = false;
       plausibility.hidden = true;
+      trustBox.hidden = true;
       setStepState(5, "대기");
       drawGraph();
       return;
@@ -1056,6 +1140,36 @@
       angleTxt = "진행 방향 " + deg.toFixed(0) + "° · 프레임 " + peak.frame;
     }
     resAngle.textContent = angleTxt;
+
+    /* 궤적 검사 — 「이 최고속력이 진짜인가」.
+       두 검사 다 픽셀·비율만 쓰므로 fps·기준 길이가 틀려도 유효하다. */
+    let trust = null;
+    if (s.peakOutlier) {
+      trust = { tone: "warn", html:
+        "<b>이 지점은 궤적에서 벗어나 있습니다.</b> 앞뒤 점이 그리는 매끄러운 곡선에서 "
+        + "<b>" + Math.round(s.pts[s.peakIdx].resid) + "픽셀</b> 떨어져 있어, "
+        + "로켓이 아니라 <b>물줄기 자국이나 허공</b>을 잡았을 가능성이 큽니다.<br>"
+        + "그래프에서 이 점을 눌러 그 프레임으로 간 뒤, 표시된 자리가 <b>로켓 위인지</b> 확인하세요. "
+        + "아니면 <b>[이 프레임 점만 삭제]</b> 후 손으로 다시 찍으세요." };
+    } else if (s.spike != null && s.spike > SPIKE_RATIO) {
+      trust = { tone: "warn", html:
+        "<b>이 값만 혼자 솟아 있습니다.</b> 앞뒤 점들보다 "
+        + "<b>" + Math.round((s.spike - 1) * 100) + "%</b> 높습니다. "
+        + "연소가 끝나는 순간은 원래 <b>완만한 어깨 모양</b>이라 한 점만 뾰족해지지 않습니다.<br>"
+        + "이 부근 점들이 <b>로켓 위에 정확히</b> 찍혔는지 확인하세요. "
+        + "특히 <b>자동 추적이 끊기고 손으로 찍기 시작한 자리</b>에서 잘 생깁니다." };
+    } else if (s.outliers > 0) {
+      trust = { tone: "", html:
+        "궤적에서 벗어난 점이 <b>" + s.outliers + "개</b> 있습니다(영상에 <b>흰 테두리</b>로 표시). "
+        + "최고속력 지점은 괜찮지만, 정리하면 더 정확해집니다." };
+    }
+    if (!trust) {
+      trustBox.hidden = true;
+    } else {
+      trustBox.hidden = false;
+      trustBox.className = "callout " + trust.tone;
+      trustBox.innerHTML = trust.html;
+    }
 
     // 발사속력이 학생 발사 조건에서 나올 수 있는 값인지만 본다
     const pl = checkPlausibility(peak.speed);
@@ -1328,12 +1442,21 @@
       ctx.stroke();
 
       const cur = currentFrame();
+      // 궤적에서 벗어난 점을 프레임 번호로 찾아 두 — 어디를 손봐야 할지 눈에 보이게 한다
+      const badFrames = new Set(
+        (state.series ? state.series.pts : []).filter((p) => p.outlier).map((p) => p.f)
+      );
       frames.forEach((f) => {
         const p = state.points.get(f);
         const d = toDisplay(p.x, p.y);
         const isCur = f === cur;
         ctx.fillStyle = p.manual ? COLOR_TRACK_MANUAL : COLOR_TRACK;
         ctx.beginPath(); ctx.arc(d.x, d.y, isCur ? 6 : 2.6, 0, Math.PI * 2); ctx.fill();
+        if (badFrames.has(f)) {
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.arc(d.x, d.y, 6.5, 0, Math.PI * 2); ctx.stroke();
+        }
         if (isCur) {
           ctx.strokeStyle = "#ffffff";
           ctx.lineWidth = 1.5;
